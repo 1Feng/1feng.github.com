@@ -5,8 +5,8 @@ layout: nil
 <feed xmlns="http://www.w3.org/2005/Atom">
  
  <title>Tom Preston-Werner</title>
- <link href="http://tom.preston-werner.com/atom.xml" rel="self"/>
- <link href="http://tom.preston-werner.com/"/>
+ <link href="http://1feng.me/atom.xml" rel="self"/>
+ <link href="http://1feng.me/"/>
  <updated>{{ site.time | date_to_xmlschema }}</updated>
  <id>http://tom.preston-werner.com/</id>
  <author>
@@ -17,7 +17,7 @@ layout: nil
  {% for post in site.posts %}
  <entry>
    <title>{{ post.title }}</title>
-   <link href="http://tom.preston-werner.com{{ post.url }}"/>
+   <link href="http://1feng.me{{ post.url }}"/>
    <updated>{{ post.date | date_to_xmlschema }}</updated>
    <id>http://tom.preston-werner.com{{ post.id }}</id>
    <content type="html">{{ post.content | xml_escape }}</content>
