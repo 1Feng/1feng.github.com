@@ -17,6 +17,9 @@
 </nav>
 <nav id="sub-nav" class="alignright">
 	<div class="social">
+		{% if site.douban_user %}
+		<a class="douban" href="http://www.douban.com/people/{{ site.douban_user }}" title="DouBan">DouBan</a>
+		{% endif %}
 		{% if site.facebook_user %}
 		<a class="facebook" href="http://www.facebook.com/{{ site.facebook_user }}" title="Facebook">Facebook</a>
 		{% endif %}

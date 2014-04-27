@@ -5,7 +5,7 @@
 url: http://erenno1.github.com
 title: 1Feng's Blog
 subtitle: Lone Star Hacker, Author
-author: 1Feng
+author: Travis Swicegood
 simple_search: http://google.com/search
 description:
 
@@ -19,7 +19,7 @@ date_format: "ordinal"
 subscribe_rss: /atom/
 subscribe_email:
 # RSS feeds can list your email address if you like
-email: codingforfan@gmail..com
+email: codingforfan@gmail.com
 
 # ----------------------- #
 #    Jekyll & Plugins     #
@@ -63,13 +63,15 @@ github_repo_count: 10
 github_show_profile_link: true
 github_skip_forks: false
 
+# douban
+#douban_user: erenno1
 # Twitter
-twitter_user: tswicegood
-twitter_tweet_count: 4
-twitter_show_replies: false
-twitter_follow_button: true
-twitter_show_follower_count: false
-twitter_tweet_button: true
+#twitter_user: tswicegood
+#twitter_tweet_count: 4
+#twitter_show_replies: false
+#twitter_follow_button: true
+#twitter_show_follower_count: false
+#twitter_tweet_button: true
 
 # Google +1
 google_plus_one: false
@@ -81,8 +83,8 @@ googleplus_user:
 googleplus_hidden: false
 
 # Pinboard
-pinboard_user: tswicegood
-pinboard_count: 3
+#pinboard_user:
+#pinboard_count: 3
 
 # Delicious
 delicious_user:
