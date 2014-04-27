@@ -2,10 +2,10 @@
 #      Main Configs       #
 # ----------------------- #
 
-url: http://travisswicegood.com
-title: TravisSwicegood.com
+url: http://erenno1.github.com
+title: 1Feng's Blog
 subtitle: Lone Star Hacker, Author
-author: Travis Swicegood
+author: 1Feng
 simple_search: http://google.com/search
 description:
 
@@ -19,7 +19,7 @@ date_format: "ordinal"
 subscribe_rss: /atom/
 subscribe_email:
 # RSS feeds can list your email address if you like
-email: blog@domain51.com
+email: codingforfan@gmail..com
 
 # ----------------------- #
 #    Jekyll & Plugins     #
@@ -93,7 +93,7 @@ disqus_short_name: travisswicegood
 disqus_show_comment_count: true
 
 # Google Analytics
-google_analytics_tracking_id: UA-880781-2
+google_analytics_tracking_id: UA-50190414-1
    
 # Facebook Like
 facebook_like: false
