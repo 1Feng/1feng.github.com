@@ -130,19 +130,19 @@ Called 2 times match
 
 bind普通函数
 
-![](../images/blog_images/bind_1.png)
+![](/images/blog_images/bind_1.png)
 
 bind成员函数，如果绑定的是`*this`， 则内部调用时为`(v1.*fn)()`
 
-![](../images/blog_images/bind_2.png)
+![](/images/blog_images/bind_2.png)
 
 显式传递`this`
 
-![](../images/blog_images/bind_3.png)
+![](/images/blog_images/bind_3.png)
 
 占位预留参数
 
-![](../images/blog_images/bind_4.png)
+![](/images/blog_images/bind_4.png)
 
 
 -------------------
