@@ -80,9 +80,11 @@ func = std::ref(max); //引用该对象
 func(1, 3);
 ```
 output:
->Called 1 times match
+```
+Called 1 times match
 Called 1 times match
 Called 2 times match
+```
  
  -------------------
  
@@ -119,7 +121,8 @@ Called 2 times match
  func = std::bind(&Test::addX, &test, 5);  //多参数绑定
  func();        //  value is 8
  test.print();  //  value is 9
- std::function<void(int)> func1 = std::bind(&Test::addX, &test, std::placeholders::_1);  //参数占位
+ std::function<void(int)> func1;
+ func1 = std::bind(&Test::addX, &test, std::placeholders::_1);  //参数占位
  func1(4);      //  value is 13
  test.print();  //  value is 14
 ```
