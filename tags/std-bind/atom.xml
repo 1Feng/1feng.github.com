@@ -4,7 +4,7 @@
   <title><![CDATA[Category: std::bind | 1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/tags/std-bind/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-04-27T18:39:37+08:00</updated>
+  <updated>2014-04-27T18:52:01+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -106,11 +106,12 @@ func(1, 3);
 func = std::ref(max); //引用该对象
 func(1, 3);
 </code>
-output:</p>
-
-<blockquote><p>Called 1 times match
+output:
+<code>
 Called 1 times match
-Called 2 times match</p></blockquote>
+Called 1 times match
+Called 2 times match
+</code></p>
 
 <hr />
 
@@ -153,7 +154,8 @@ Called 2 times match</p></blockquote>
  func = std::bind(&amp;Test::addX, &amp;test, 5);  //多参数绑定
  func();        //  value is 8
  test.print();  //  value is 9
- std::function&lt;void(int)> func1 = std::bind(&amp;Test::addX, &amp;test, std::placeholders::_1);  //参数占位
+ std::function&lt;void(int)> func1;
+ func1 = std::bind(&amp;Test::addX, &amp;test, std::placeholders::_1);  //参数占位
  func1(4);      //  value is 13
  test.print();  //  value is 14
 ```</p>

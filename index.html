@@ -196,9 +196,14 @@
 
 <p>output:</p>
 
-<blockquote><p>Called 1 times match
-Called 1 times match
-Called 2 times match</p></blockquote>
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="n">Called</span> <span class="mi">1</span> <span class="n">times</span> <span class="n">match</span>
+</span><span class='line'><span class="n">Called</span> <span class="mi">1</span> <span class="n">times</span> <span class="n">match</span>
+</span><span class='line'><span class="n">Called</span> <span class="mi">2</span> <span class="n">times</span> <span class="n">match</span>
+</span></code></pre></td></tr></table></div></figure>
+
 
 <hr />
 
@@ -237,6 +242,7 @@ Called 2 times match</p></blockquote>
 <span class='line-number'>27</span>
 <span class='line-number'>28</span>
 <span class='line-number'>29</span>
+<span class='line-number'>30</span>
 </pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="k">class</span> <span class="nc">Test</span>
 </span><span class='line'> <span class="p">{</span>
 </span><span class='line'> <span class="k">public</span><span class="o">:</span>
@@ -263,7 +269,8 @@ Called 2 times match</p></blockquote>
 </span><span class='line'> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>  <span class="c1">//多参数绑定</span>
 </span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 8</span>
 </span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 9</span>
-</span><span class='line'> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">func1</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">placeholders</span><span class="o">::</span><span class="n">_1</span><span class="p">);</span>  <span class="c1">//参数占位</span>
+</span><span class='line'> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">func1</span><span class="p">;</span>
+</span><span class='line'> <span class="n">func1</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">placeholders</span><span class="o">::</span><span class="n">_1</span><span class="p">);</span>  <span class="c1">//参数占位</span>
 </span><span class='line'> <span class="n">func1</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>      <span class="c1">//  value is 13</span>
 </span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 14</span>
 </span></code></pre></td></tr></table></div></figure>
