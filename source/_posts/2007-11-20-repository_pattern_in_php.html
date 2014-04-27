@@ -1,0 +1,80 @@
+--- 
+layout: post
+title: Repository Pattern in PHP
+---
+<p>When I worked with <a href="http://blog.joshuaeichorn.com/">Josh Eichorn</a> a couple of years ago, we were designing the framework that our company's software was built on.  I wanted to move more toward a <a href="http://martinfowler.com/eaaCatalog/repository.html">Repository</a> style architecture instead of interacting directly with the database via streamlined a <abbr title="Data Access Object">DAO</abbr>.  Josh argued at the time that dealing directly with the database was a better option.  It removed a layer of complexity and he could go to the bookstore down the street and pick one of a few hundred books on SQL off of the shelf and give it to someone new to bring them up-to-speed on how to access the system.  As an added bonus, you have all of the power of SQL at your fingertips whenever you need to do something complex.  His argument won me over, and until this past week I've viewed that as probably the most sane way to go.</p>
+
+<p>The problem with this method isn't so much with the exposed SQL.  If that was the only method of access, I would be fine with it.  Programmers are a lazy bunch, however, and one of us always ends up adding a findById($id) method and it's off to the races.  Next thing you know, there's helpers for all sorts of queries, with overrides in the form of optional parameters, calls to other helpers that generate an associative array that's used by the method to build a query that's sent to the data access layer and...  I could go on.  Now, what started out as the simplest solution has morphed into this unrecognizable mishmash of SQL, code and convention.</p>
+
+<p>So, my new motto:</p>
+
+<blockquote><p>All SQL should be hidden to protect developers from themselves and allow someone else who knows a bit about mildly complex SQL statements to build the queries as needed. - <i>Travis Swicegood, November 2007</i>, motto subject to change...</p></blockquote>
+
+<p>Here's the problem.  You have widgets, each widget has a creator, and N users assigned to it.  Your query must return all widgets that the current user is either the creator of, or one of the users assigned to it.  If you've ever done an <em>OR</em> query across multiple tables, you've already seen the problem when you imagined the SQL that would normally be generated for that query.</p>
+
+<code><pre>SELECT
+    widgets.*
+FROM
+    widgets
+    LEFT JOIN widgets_users USING(widget_id)
+WHERE
+    widgets.creator_id = :current_user_id
+    OR widgets_users.user_id = :current_user_id</pre></code><p></p>
+
+<p>Now I've just created a full table scan of widgets_users.  A system with a few hundred widgets and a few hundred users and each widget with a few users assigned to it, it's not unreasonable to expect that widgets_users table to end up the ten or twenty thousand records quickly.  Add more widgets and more users, the problem keeps getting worse.</p>
+
+<p>In order for that data to be retrieved at a reasonable speed, the best solution I found was to create a derived table from two select statements that are unioned, each containing their half of the or criteria:</p>
+
+<code><pre>SELECT
+    widgets.*
+FROM
+    (
+        SELECT * FROM widgets WHERE creator_id = :current_user_id
+        UNION
+        SELECT 
+            widgets.*
+        FROM
+            widgets
+            INNER JOIN widgets_users USING(widget_id)
+        WHERE
+            widgets_users.user_id = :current_user_id
+    ) as widgets</pre></code><p></p>
+
+<p>Raise your hand if that was the first query that popped into your head when you thought "any widget that a user created or has been assigned".  It wasn't mine either, but that's the one that executed with the least amount of overhead on some work I did last week.  In the straight SQL codebase, you change the query and move on, but in the second, more common, helper-oriented codebase that I described earlier, you more often than not end up with code that looks like this:</p>
+
+<code><pre>$model = new Widget();
+$data = $model->getAll(
+    $current_user, 
+    array(
+        'extra_tables' => 'LEFT JOIN widgets_users USING (widget_id)',
+        'extra_criteria' => 'OR widgets_users.user_id = :current_user_id',
+    )
+);
+echo new GenericListView($data);</pre></code><p></p>
+
+<p>That last line was just wishful thinking on my part.  ;-)  Most of the time it's assigned to something like Smarty to do the templating instead of letting code to it.  But I digress, the problem with this half and half method is that now I have to touch multiple areas to get the change in the query that I want.  That's if there's enough flex points in the code above to allow me to inject my own implementation as the query is being built.  In the above code, so many assumptions are being made that you almost have to scrap the existing behavior and start fresh with a new method to get what you want.</p>
+
+<p>The Repository pattern helps remove this problem.  All developer interaction is at the meta level, they could care less where the data is coming from.</p>
+
+<code><pre>$repo = new Repository();
+$criteria = new Criteria('Widget');
+$criteria->addFilter(
+    new Criteria_Filter(Widget::creator, $current_user),
+    new Criteria_Filter(Widget_Users::user, $current_user)
+);
+$widgets = $repo->matching($criteria);
+
+echo new GenericListView($widgets);</pre></code><p></p>
+
+<p>Now my Repository object gets to build the entire query and return the data.  Even if it doesn't have the flexibility to inject custom query templates directly into the system, my changes are much more localized and hidden behind the firewall of the Repository object.  Assuming I create a lot of list views, it could even be decorated to simplify the code:</p>
+
+<code><pre>$criteria = new Criteria_CreatorOrAssignedUser($current_user);
+$repo = new WidgetRepository();
+$widgets = $repo->matching($criteria);
+echo new GenericListView($widgets);</pre></code><p></p>
+
+<p>This could be achieved by adding helpers in to the straight SQL model making this approach seem like the logical conclusion to adding helper methods and objects as you move from a straight SQL model to the helper mishmash, but there is a distinct difference between the two.  It is subtle, and 100% perception, but there nonetheless.  With the helper model developers are thinking in SQL - i.e., I'm hiding the query that's being built.  With the Repository model, developers are thinking in code - i.e., I'm working on this dataset, wherever it comes from.</p>
+
+<p>In the above code, there is a specialized, domain-specific criteria and decorated the repository so it automatically assumes we're after a Widet, but now all that layer is expected to do is query whatever data source it can and retrieve the data.  All my client code cares about is that it has a list to work with, all my Repository code cares about is that it can create that list.</p>
+
+<p><em>Update</em>: When I finished this article Sunday night I realized that I had almost argued myself in a circle and decided to hold off the final edit.  As a I edited it this, I realized that a properly separated SQL based can still work, but 9 times out of 10, it doesn't because the layers get mixed up.  If the Smarty evangelists are to be believed, programmers can't be trusted with themselves.  In that case, SQL with helpers can't be done properly and the Repository is the last refuge for those of us who want to make sure there's a proper split between the data/storage layer and the domain layer.</p>

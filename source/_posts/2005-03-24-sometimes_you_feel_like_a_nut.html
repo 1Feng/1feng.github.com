@@ -1,0 +1,17 @@
+--- 
+layout: post
+title: Sometimes you feel like a nut...
+---
+<p><em>Techie warning: This post is about technical stuff...  If you're a programmer, you'll get it.</em></p>
+
+<p>Right now I feel like a dumb nut.  I've spent yesterday afternoon narrowing down a bottleneck in some software I've programmed and I just found the problem.  My query to the database for a zipcode was like this:</p>
+
+<blockquote><p><code>SELECT * FROM Zipcodes WHERE zipcode = 64101</code></p></blockquote>
+
+<p>The zipcode field was indexed, it was doing what it should but was taking .005 of a second.  Not long unless you start doing it for hundreds or thousands of zipcodes; then it becomes seconds worth of waiting.  The problem was the <code>zipcode</code> field was a string field and I was using an <a href="http://www.google.com/search?&amp;q=define%3Ainteger">integer</a>.  So I changed the query to:</p>
+
+<blockquote><p><code>SELECT * FROM Zipcodes WHERE zipcode = "64101"</code></p></blockquote>
+
+<p>And my execution time dropped to 0.0006.  Much, much, more manageable.</p>
+
+<p>Sometimes its the simplest things.  I don't know how many times I looked at that query before it dawned on me that the integer-to-string conversion was happening on every query.</p>

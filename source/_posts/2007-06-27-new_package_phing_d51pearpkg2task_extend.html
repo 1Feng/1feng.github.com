@@ -1,0 +1,19 @@
+--- 
+layout: post
+title: "New package Phing_d51PearPkg2Task: Extending phing"
+---
+<p>This morning I wrapped up a new package called <a href="http://pear.domain51.com/index.php?package=Phing_d51PearPkg2Task">Phing_d51PearPkg2Task</a>.  As the name might suggest, it's a new <a href="http://phing.info">phing</a> task that replaces the existing pearpkg2 task.  I created it because I was - make your sure you're sitting down for this one - turned off by its abstraction.  Everything was done via a mapping or option element and it just seemed rather obscure.</p>
+
+<p>The package still has a long way to go, there's some hard-coded areas that I just took the shortcut on because I was in a "just make it work" mode when I finished it out.  For example, it assumes you're using at least PEAR 1.6.0 and PHP 5.2.3 which shouldn't be a problem for anyone, because we all keep both of PEAR and PHP completely up-to-date... right? :-)  As it stands, this scratches a particular itch that I had; as the itch moves around I'll add more features.</p>
+
+<p>Extending phing is straight forward.  The only real gotcha here is how to name your class.  If you're familiar with PEAR's naming convention, it will make your skin crawl.  They use a Java'esque naming structure in which you load your new task with a &lt;taskdef&gt; call following their Java counterpart, <a href="http://ant.apache.org/">Ant's</a> lead.  Assuming you've installed my package, you would load the new task along these lines:</p>
+
+<blockquote><p><code>&lt;taskdef classname="phing.tasks.ext.d51PearPkg2Task" name="d51pearpkg2" /&gt;</code></p></blockquote>
+
+<p>This file is located in your include_path under phing/tasks/ext/d51PearPkg2Task.php.  Using a PEAR naming convention, its class name would have been phing_tasks_ext_d51PearPkg2Task, however, phing also uses the name would be used in Java - albeit there with namespaces - so the class name is d51PearPkg2Task.</p>
+
+<p>Beyond that, the code is quite simple.  You must declare a setter method to handle each attribute.  <code>setBaseInstallDir($base_install_dir)</code> would handle a <code>baseinstalldir</code> attribute.  Likewise, each sub-element must have a create method that returns an object to handle any sub-elements and attributes it might carry.  <code>createLicense()</code> will handle any &lt;license&gt; elements it encounters.</p>
+
+<p>Two other methods are required for tasks, <code>init()</code> and <code>main()</code>.  The former handles any initialization the object might need to do outside of the constructor while the latter is the main entry point that phing calls to actually run the test.  <code>main()</code> is called after all of the attributes and elements have been handled, so all that's left at that point is to actually do what your task is supposed to.</p>
+
+<p>That's all there is to it.  Of course, you can place your phing task wherever you like, so long as it's accessible via the include_path with the dots representing slashes in the path.  With custom tasks, you can do anything with phing you can do with PHP.  Seeing how easy they are to add, it really makes phing a powerful choice for building any sort of project.  Now, I just need to wrap an API to my fridge as a PHP extension so I can add a &lt;bringcoldbeer&gt; task. :-)</p>

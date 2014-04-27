@@ -1,0 +1,74 @@
+--- 
+layout: post
+title: "Why inheritance sucks: part deux"
+---
+<p>In the <a href="http://www.travisswicegood.com/index.php/2007/10/11/why_class_inheritance_sucks#comments">comments</a> of my <a href="http://www.travisswicegood.com/index.php/2007/10/11/why_class_inheritance_sucks">previous post</a> - <a href="http://www.travisswicegood.com/index.php/2007/10/11/why_class_inheritance_sucks"><em>Why class inheritance sucks</em></a> - I got a comment that shows some of the confusion with <em>composition</em> versus <em>inheritance</em> in the world of objects.  <a href="http://www.sfsmith.com/blog/">Sandy</a> <a href="http://www.travisswicegood.com/index.php/2007/10/11/why_class_inheritance_sucks#c8070">said</a>:</p>
+
+<blockquote><p>...I have cases where, say, if I'm building a CMS, I have a ContentObject class that has generalized methods to determine where it's been published, etc. If I have two types of content, Document and Event, I fail to see why extending ContentObject for each one is bad.</p>
+
+<p>Now if I have another type, Author, and each Document needs an Author, it's a has-a relationship. Extending Author to get the author's name as part of the Document would be wrong. Instead it should be $document->author->getName();</p>
+
+<p>But in the first case, if I need to implement a publishTo($page_id) method, I'd rather do it once in ContentObject, so I can change that implementation in one place. Am I missing something that makes that a bad idea?</p></blockquote>
+
+<p>That is a pretty standard case where it looks like the best route is <code>Event extends ContentObject</code>, especially with a <code>publishTo()</code> method that seems so universal.  Given any number of factors, this might actually be the best route for any given project.  I approach <abbr title="Object Oriented Programming">OOP</abbr> from a flexibility standpoint with one of its biggest flex-points being <a href="http://en.wikipedia.org/wiki/Loose_coupling">loose coupling</a> which in turn promotes <a href="http://en.wikipedia.org/wiki/Reusability">reusability</a>.  I'm going to use <code>Event</code> as a hypothetical example.</p>
+
+<p>In the normal case, you might want to add it to a page of other events, making sure its ordered correctly, etc., etc.  What happens when it needs to update Google Calendar, shoot off an SMS to the administrators, <em>and</em> publish to a page particular <code>ContentObject</code> page?  If that happens, <code>Event->publishTo($page_id)</code> gets:</p>
+
+<ul><li>relegated to a call from some other method such as <code>Event->publish()</code></li>
+<li>gets repurposed to the point that <code>publishTo($page_id)</code> doesn't adequately convey what it's actually doing</li>
+<li>or worse it gets ignored when someone new writes the <code>publish()</code> code because they weren't aware of the inherited method</li></ul>
+
+<p>Assuming we want avoid all of these, a composite in the simplest form would look something like this:</p>
+
+<code><pre>class Event {
+  ...  logic and such ...
+
+  public function publish() {
+    $content_object = new ContentObject();
+    $content_object->publish_data('some-page', $this);
+    $google_cal = new GoogleCal();
+    $google_cal->add_event($this);
+    $sms = new SMSSender('admins@example.mobi');
+    $sms->send_event($this);
+  }
+}</pre></code><p></p>
+
+<p>This gives us the composition and moves the logic of saving out to other objects, but isn't very flexible.  Every new publishing type requires a change to <code>Event::publish()</code>.  This is a place where the <a href="http://en.wikipedia.org/wiki/Visitor_pattern">Visitor Pattern</a> proves useful.  The <code>publish()</code> method becomes:</p>
+
+<code><pre>public function publish(EventPublisher $publisher) {
+  $publisher->publishEvent($this);
+}</pre></code><p></p>
+
+<p>With that, you completely externalize the act of publishing an <code>Event</code> to any object that implements the <code>EventPublisher</code> interface.  Now any object can be used for publishing an <code>Event</code> without any changes required to the actual <code>Event</code> code.  Your commit messages will be shorter and less code will have to be written which should both translate into less of a likelihood for bugs to get introduced (not that they'd make it past that stellar <abbr title="Test Driven Design">TDD</abbr> test suite you've coded ;-)).  And you can still share your <code>ContentObject::publishTo()</code> functionality:</p>
+
+<code><pre>class ContentObject implements EventPublisher, DocumentPublisher
+{
+  public function publishTo($page_id) {
+    ... do publishing ...
+  }
+
+  public function publishEvent(Event $event) {
+    $this->name = $event->name;
+    ... etc., etc. ...
+    $this->publishTo('some-page');
+  }
+
+  public function publishDocument(Document $document) {
+    $this->name = $document->filename;
+    ...  etc., etc. ...
+    $this->publishTo('some-page');
+  }
+}</pre></code><p></p>
+
+<p>The careful observer will notice that while <code>ContentObject</code>uses the property <code>$name</code> in the above example, the property that <code>Event</code> and <code>Document</code> use is different.  With the above functionality you don't end up having to shoe-horn property names into specific schemas because of inheritance allowing the <em>best practice</em> to dominate the code instead of the <em>best choice</em>.</p>
+
+<p>And now the original "what if" problem.  Publishing all of the code might look something this:</p>
+
+<code><pre>$publisher = new MultipleEventPublisher(array(
+  new ContentObject('calendar-page'),
+  new GoogleCal('my-events'),
+  new EventSMSPublisher('8885554321@example.mobi')
+));
+$event->publish($publisher);</pre></code><p></p>
+
+<p>Now instead of <code>Event</code> <em>being</em> a <code>ContentObject</code>, it <em>uses</em> one.  The shift paradigm is subtle, but something that can help produce better, more flexible code.</p>

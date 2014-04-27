@@ -1,0 +1,27 @@
+--- 
+layout: post
+title: "New release: PHPT"
+---
+<p>After a few months of one or two nights a week spent hacking away and a couple of marathon sessions, I've finished work on the first usable release of PHPT, what I hope to become the successor to PEAR_RunTest in PEAR2.  Since this is usable and PEAR2 is still being worked out, I've decided to release this as a standalone package for the time being with the intent of bundling it with Pyrus or including it directly in PEAR2 when PEAR2 is realized.</p>
+
+<p>This provides the majority of the functionality provided by PEAR's <code>pear run-tests</code> command via its own <code>phpt</code> command and it can even provide pear style output:</p>
+
+<p><code>$ phpt -rq --reporter Pear /path/to/tests</code></p>
+
+<p>Functions like:</p>
+
+<p><code>$ pear -rq /path/to/tests</code></p>
+
+<p>Of course, if you leave "-- reporter Pear" out you'll get the PHPT output which provides a cross between PHPUnit and SimpleTest output.  I'll be surprised if this works on Windows (yet).  PEAR_RunTest punts on Windows by pushing everything through output buffering.  I may yet do that, but I want to explore other options first.</p>
+
+<p>I'll post more as I get a chance.  In the meantime, I've started a <a href="https://svn.phpt.info/pocketguide/trunk/">pocket guide</a> in the vain of PHPUnit's excellent reference.  Right now it's written in Markdown format so it's accessible without anything but a text viewer.</p>
+
+<p>To install PHPT:</p>
+
+<p><code>$ pear channel-discover channel.phpt.info<br />
+$ pear install phpt/PHPT_Core-alpha</code></p>
+
+<p>Package page is at: <a href="http://channel.phpt.info/index.php?package=PHPT_Core">http://channel.phpt.info/index.php?package=PHPT_Core</a><br />
+Please post any issues at: <a href="http://code.google.com/p/phpt/issues/list">http://code.google.com/p/phpt/issues/list</a></p>
+
+<p><em>Update</em> forgot to add the dev mailing list URL: <a href="http://groups.google.com/group/phpt-dev">http://groups.google.com/group/phpt-dev</a></p>

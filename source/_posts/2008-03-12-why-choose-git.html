@@ -1,0 +1,33 @@
+--- 
+layout: post
+title: Why choose Git?
+---
+<p>I've been kicking around the idea of a book on <a href="http://git.or.cz/">Git</a>.  I think it's a great tool, but there's a lack of an accessible guide to get started with.  In any book on a new technology or tool, there's the initial sales pitch.  Why should you use this?  How is it better than what you're already doing?  Than its alternative?  I'm trying to answer those questions right now for myself.  It's only a few paragraphs of the entire book, but I think having the answers will help keep me on track for the rest of the book.  Here's what I have right now.</p>
+
+<h3>Distributed</h3>
+
+<p>One of the main reasons for using Git over the two traditional version control systems&mdash;<a href="http://www.nongnu.org/cvs/">CVS</a> or <a href="http://subversion.tigris.org/">Subversion</a>&mdash;is its distributed architecture. Instead of having one central repository, or one central point of failure, each developer clones the entire repository. Changes can then be pushed back to a central source, or a completely different source.</p>
+
+<p>In the workplace, this allows for multiple layers of code review before the code makes it into the main repository. Each developer would push their changes back to their team's repository, with the team captain pushing changes back to the main company repository after they've been reviewed and the unit tests are verified.</p>
+
+<p>In the open-source community, distributed means that no one company or person controls the repository. Any developer could easily publish their changes with the exact same history up to their change. These changes could then be incorporated by developers that are still tracking the official repository, allowing them to try them out without leaving their version control software unused.</p>
+
+<h3>Easy Branching and Merging</h3>
+
+<p>Branching within Git is easy and without much overhead. Tracking multiple branches, merging changes from many branches in to one, tracking changes across multiple merges. All of these are considered esoteric in most version control systems, only for the most advanced user. While they still take some practice in Git, doing them is straight forward.</p>
+
+<h3>Tags are Just Tags</h3>
+
+<p>If you moved from CVS to Subversion, you were probably surprised the first time you realized you could change code that you "tagged". Git enforces the "gentleman's agreement" found in Subversion by not allowing anyone to write directly to a tag, treating it as just a named snapshot.</p>
+
+<h3>Network Not Required</h3>
+
+<p>It is easy to forget in the age of always-on broadband connections, but we don't always have a network connection. Since your working copy is your repository, you don't need access to a network connection to track changes. You can safely work on your code on your next plane trip, tracking your changes the entire time, then sync with your repository after you've landed.</p>
+
+<h3>Can Communicate with Subversion</h3>
+
+<p>In the centralized world of Version Control Systems (<abbr title="version control system">VCS</abbr>), Subversion has become the defacto standard for new servers. Having the ability to communicate with SVN means that your entire company does not have to switch to Git just to suit one team or one developer. They can maintain their copy of the repository along side the existing infrastructure and push and pull changes to Subversion seemlessly.</p>
+
+<p>Anyone out there using Git have anything more to add?  What's the obvious thing I'm missing?</p>
+
+<p>[dzone]</p>

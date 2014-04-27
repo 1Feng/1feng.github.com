@@ -1,0 +1,18 @@
+--- 
+layout: post
+title: "PHPT: A teaser..."
+---
+<p>So my free time of late (what there is of it) has been spent on a project that's getting really close to v0.1 release.  In other words, its first functional release.  As a teaser to what it might entail, consider this code that I just ran on my server:</p>
+
+<pre>$ ./scripts/phpt --recursive --reporter PearQuiet tests \
+&amp;&amp; pear run-tests -rq tests
+Running 392 tests
+TOTAL TIME 00:24
+392 PASSED TESTS
+0 SKIPPED TESTS
+Running 392 tests
+TOTAL TIME: 00:31
+392 PASSED TESTS
+0 SKIPPED TESTS</pre>
+
+<p>If you've ever run a test using the PEAR installer or know what a <code>.phpt</code> file looks like, you might be able to guess what I've been up. :-)  Stay tuned for more info...</p>

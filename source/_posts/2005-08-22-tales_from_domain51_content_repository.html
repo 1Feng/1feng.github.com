@@ -1,0 +1,71 @@
+--- 
+layout: post
+title: Tales from Domain51 Content Repository
+---
+<p>For any of you who following my <a href="https://svn.domain51.net/svn/">Subversion repository</a>, and from the looks of the stats on that site, that would appear to be none of you, you would know that I've been working on implementing my <a href="http://list.domain51.net/pipermail/d51toolkit-dev/2005-July/000001.html">Domain51 Content Repository</a> (d51CR).  I've got a lot of the basics out of the way and have started implementing node types and definitions.  I'll save you from a full explanation, but a quick understanding of what they are is necessary for the rest of this...</p>
+<!--more-->
+<p>d51CR implements a PHP version of Java's JSR-170, or the Java Content Repository.  The idea is to provide a universal API for accessing data within a repository, be it a file system, forum, or blog.  All of them accomplish the same goals, creating nodes that contain properties (or content), JSR-170 just codifies a means of retrieving that data.  With d51CR, my goal is to provide a system that abstracts data in such a way that it can contain any type of data and work just fine.  Think of it as a universal object persistence system.</p>
+
+<p>Now, the node types... Each node could have a node type which defines how that node will behave.  As an example, a folder might implement the nt:folder type which would say that it could have children nodes, while a file might implement nt:file which would say that it couldn't have children nodes.  That's the bird's eye view anyway.</p>
+
+<p>So I got to the point toward the end of last week and into the weekend that I was implementing d51NodeTypes (my code for handling node types) and I went about it the normal way.  Created a nodeTypes table in the database, added the fields I needed, and away I went.  Then I started reading the <a href="https://svn.domain51.net/svn/NonOriginal/jsr170-1.0/spec/jsr170-1.0.pdf">JSR-170 Spec</a> which talks about implementing them inside the actual repository.  Well duh.  Here I am building a content repository to store <em>content</em>, and I'm putting some of that content in other tables.  </p>
+
+<p>I've had a few discussions over the past few months with various other developers about my plans and the one thing I've heard time and time again is that it probably won't perform as well as creating straight tables storing the data you want.  As I thought about rewriting the node types to be stored inside the repository, it dawned on me that I had an opportunity to test these theories and see how they panned out.  The results... Well, they surprised me.</p>
+
+<p>For starters, I had to create a new test database that contained all the new nodes I needed to store.  I got that up and running, finding a few bugs along the way, squashed them, and put unit tests in to make sure they don't pop up again.  By the time I got done the new data in the repository had caused the number of tests being run to grow from 510 in the old system to 621 in the new.  Each test can reset the database and since the new system will take longer to reset, I factored in a way for guestimating how long the database reset takes.  Each test starts off with two resets and it times the second reset figuring it will be approximately the same as subsequent resets.  It calculates the total time to run the tests and subtracts out what the approximate time spent resetting the database.</p>
+
+<p>I'll let the numbers speak here:</p>
+<ul><li><p>Testing the new abstract system:</p>
+<pre>Executed in 1.1406052112579
+Executed in 1.0612101554871
+Executed in 1.504843711853
+Executed in 1.0510931015015
+Executed in 1.1378743648529
+Executed in 1.0988252162933
+Total: 6.991
+Average: 1.165 / 621 = 0.00187 per test</pre></li>
+<li><p>Testing the old "standard" system:</p>
+<pre>Executed in 0.50116372108459
+Executed in 0.90583300590515
+Executed in 0.98401999473572
+Executed in 0.96339273452759
+Executed in 0.97033905982971
+Executed in 0.78611278533936
+
+Total: 5.116
+Average: 0.852 / 510 = 0.00167 per test</pre></li></ul>
+
+<p>Those numbers are very close, but you'll notice that the first test of the new system seems abnormally low.  Figuring that something may have thrown it off, I decided to pull the highest and lowest times from each and recalculate the averages:</p>
+
+<ul><li>Average per test with abstract system: 0.00178 per test</li>
+<li>Average per test with "standard" system: 0.00180 per test</li></ul>
+
+
+<p>I did a double take when I saw those the first time, too.  What makes this that much more impressive is that the new system has to parse a quasi-XPath query and translate it into an executable SQL statement prior to executing it while the older system executes it directly against the database access object.  I know this is a small sampling of how this will actually work in the real-world, but it does bode well seeing that it can take on a handful of node types and come out to the good.</p>
+
+<p>Just FYI, the query it is performing is to see if a node type has the property of "isMixin" (does it play well with other node types, basically).  In the standard system the query was along the lines of:</p>
+
+<blockquote><p><code>SELECT * FROM nodeTypes WHERE isMixin = 1</code></p></blockquote>
+
+<p>The XPath to make that happen looks like:</p>
+
+<blockquote><p><code>/d51cr:nodeTypes/[@isMixin = TRUE]</code></p></blockquote>
+
+<p>Which translates into:</p>
+<blockquote><p><code>SELECT t2.* FROM <br />
+  items AS t0, <br />
+  items AS t1,<br />
+  items AS t2<br />
+  JOIN items AS t3 ON (t2.uuid = t3.parent_id)<br />
+  JOIN booleanProperties AS p ON (t3.uuid = p.item_id)<br />
+WHERE<br />
+  t0.name = "ROOT" AND <br />
+  t1.name = "d51cr:nodeTypes" AND <br />
+  t0.uuid = t1.parent_id AND <br />
+  t2.lft &gt; t1.lft AND t2.rgt &lt; t1.rgt AND <br />
+  t3.name = "d51cr:isMixin" AND p.value = "1"<br />
+</code></p></blockquote>
+
+<p>Needless to say, the second should be the slower of the two.  If the second SQL query odd and you've never seen "lft" or "rgt" in an SQL statement before, check out <a href="http://www.sitepoint.com/print/hierarchical-data-database">this article on SitePoint</a> for an explanation of the modified preorder tree traversal algorithm.</p>
+
+<p>Anyhow, it looks like I'm going to rewrite a few other parts of d51CR to store their data inside the items table as well.</p>

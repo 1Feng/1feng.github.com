@@ -1,0 +1,21 @@
+--- 
+layout: post
+title: MTS07 - Overview of ASP.NET and Atlas
+---
+<p><a href="http://www.JoeOn.net">Joe Stagner</a> - Joe.Stagner@</p>
+
+<p>He's focusing mostly on Atlas and AJAX.  He thinks the current AJAX is kind of naive in that it's mostly eye-candy.  Couldn't agree more.</p>
+
+<p>They're focusing on powering business.  Using AJAX (which he's including web services or Web 2.0 in) to intercept VoIP calls, grab the phone number, do look-ups, when an order is placed on that call, print out a picture of the building, routing drivers, etc., etc., all behind the scenes to the person answering the call.</p>
+
+<p>He's spending a lot of time namespacing in JS.  All of the AJAX stack is namespaced with their Client Library.  They apparently have their own namespace style which I'm not sure why they need.  All you have to do is "<code>var MS = {};</code>", then away you go.</p>
+
+<p>They've got some new stuff in the work that makes multi-domain JS possible.  Sounds like a security nightmare.</p>
+
+<p>His gym's webserver is running PHP. :-)</p>
+
+<p>They're generating JS from web service files based on the ASP.NET code.  Seems like what we're doing with PHP all of the time.  The one difference is that they completely translate from the server-side to full native JS.  So you return an object that implements the Iterator in PHP and the MS code creates that full object in JS that you can iterate through without calling back to the server for each new list.</p>
+
+<p>That's very similar to something I've been talking to <a href="http://blog.joshuaeichorn.com/">Josh</a> about regarding duplicating the PHP environment in JS to have fully rich apps with an MVC model in JS.</p>
+
+<p>"The biggest problem is that IE6 is the largest browser..."  Taken slightly out of context. ;-)</p>

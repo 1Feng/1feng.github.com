@@ -1,0 +1,27 @@
+--- 
+layout: post
+title: With friends like these...
+---
+<p>Yesterday I proposed my first PEAR package.  I've helped a few friends with packages of their own, but never got around to getting a developer account and taking the lead on a package.  After hearing about the recent changes in store and the umpteenth "you should propose that" from <a href="http://blog.joshuaeichorn.com/">Josh</a>, I decided to propose one of the smaller "packages" I've used in some of my code: <a href="http://pear.php.net/pepr/pepr-proposal-show.php?id=482">PHP_Callback</a>.  I say packages with quotation marks because it's really just one, simple file.</p>
+
+<p>The main goal of this is to wrap the callback pseudo-type in PHP into something that's more manageable.  As it currently stands, you have to do <a href="http://php.net/is-callable">is_callable()</a> on a variable to determine whether you can call it without an error.  PHP_Callback performs that check and throws an exception if you try to instantiate it with an invalid callback.  It also allows you to store parameters to be used by the callback repeatedly which is useful for setting up a callback and just passing it off to other objects and have them get back exactly what you want to give them.</p>
+
+<p>Anyhow, the proposal went live yesterday.  The first two comments (note it's an international list, so that's the reason for the slightly broken English):</p>
+
+<blockquote><p>This is useless. PHP callbacks are already quite comprehensible and don't need to be complicated.</p></blockquote>
+
+<p>And... </p>
+
+<blockquote><p>A proper way to use callbacks in OO code is to implement something like Command pattern, not create a useless wrapper around call_user_func().</p></blockquote>
+
+<p>And as I write this, this just came in:</p>
+
+<blockquote><p>I think it's not needed.... there is quite a comprehensible callback mechanism in PHP and I don't think we need such a pure OO class in the repository just to fit all design patterns. It's just confusing and not needed, as this pattern is more needed by strict OO languages.</p>
+
+<p>Maybe someone needs such a class, but it's too easy to implement as there is a own PEAR package needed.</p></blockquote>
+
+<p>Wow.  That's all I can think of.  I'm actually surprised I haven't gotten a "PHP is not Java" comment yet.  Why is there such a resistance to <abbr title="object oriented">OO</abbr> code from the most vocal PHP'ers?</p>
+
+<p>As for the actual comments.  To the first one I would say, so type hinting isn't necessary at all?  To the second, you didn't read my code as I didn't use <code>call_user_func()</code>, but instead used <code>call_user_func_array()</code> ;-)  The third borders on ridiculous.  Because something is easy to implement is reason enough for it to be excluded from a standard library?  "So since 'echo' is easy to implement, let's leave it out of shells."</p>
+
+<p>Again, wow.  The reason I unsubscribed from pear-dev several years ago is just those types of comments.  It was a pain to filter through them to get to the worthwhile content.  This is a simple package.  One most new-to-PHP programmers could have put together in an afternoon.  I can only imagine how quickly a new developer would have unsubscribed from pear-dev and pulled his proposal if his first foray into contributing to the community had been met so quickly with such unconstructive criticism.</p>

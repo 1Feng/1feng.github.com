@@ -1,0 +1,39 @@
+--- 
+layout: post
+title: MTS07 - Security  Michael Howard
+---
+<p>Michael Howard the Security Guy - mikehow@</p>
+
+<p>Good quote: "The problem with that... aside from the lawsuits." :-)</p>
+
+<p>He's spent the first few minutes talking about security as requiring a pragmatist's mindset.  Essentially, you can't secure everything and if you could you couldn't use it.</p>
+
+<p>"Everyone has security problems...  You're either going to do something about it or nothing."</p>
+
+<p>"Reliability is dead easy.  It's man versus machine.  Security is man versus man."</p>
+
+<p>On the <abbr title="Security Development Lifecycle">SDL</abbr>: "Spin it a spiral, send it down a waterfall, or slap Agile on it..." :-)  </p>
+
+<p>Security Training is required for new hires.  A question from the gallery was can an <abbr title="Independent Software Vendor">ISV</abbr> take the class.  Mike's response was "if you sign the <abbr title="Non-Disclosure Agreement">NDA</abbr>, sure.  I wouldn't have a problem with anyone in this room taking the class."</p>
+
+<p>Threat Modeling is all about design issues.  It's looking at design prior to implementation to see what possible security risks it has.</p>
+
+<p>This guy's got great quotes.  "I heard a pundit say that this industry will only get better when we have better tools.  No.  This industry will only get better when we don't have monkeys programming."</p>
+
+<p>He's a firm believer that tools help, but they're not the end-all.  Couldn't have said it better myself.  One tool they do use extensively is check-in policies.</p>
+
+<p><abbr title="Standard Annotation Language">SAL</abbr> - the Standard Annotation Language.  It's using annotations for checking latter in testing and security.  The idea is that if you annotate the header files and the tools start reflecting information from it while testing.  Kind of an interesting way to handle testing.</p>
+
+<p>Just thinking out loud here...  You could write code to do something like:</p>
+
+<p><code>/**<br />
+ * @assertEquals this(2, 2), 4<br />
+ */</code></p>
+
+<p>Then the testing framework can build its tests based on the inflection.  Might be interesting.</p>
+
+<p>In order to add things to the SDL it has to demonstrate that it could have prevented 5 bugs.</p>
+
+<p>His blog is <a href="http://blogs.msdn.com/michael_howard">blogs.msdn.com/michael_howard</a>.</p>
+
+<p>He made the assertion that Apache is getting worse with their bug introduction.  And that it's the most hacked server on the Internet.  Personally, I think that's disingenuous as it's also the most prevalent server on the Internet.</p>

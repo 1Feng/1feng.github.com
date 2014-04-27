@@ -1,0 +1,132 @@
+@font-face {
+	font-family: 'CantarellRegular';
+	src: url('../fonts/Cantarell-Regular.eot');
+	src: local('Cantarell'), local('Cantarell-Regular'), url('../fonts/Cantarell-Regular.woff') format('woff'), url('../fonts/Cantarell-Regular.ttf') format('truetype'), url('../fonts/Cantarell-Regular.svg#Cantarell-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'CantarellOblique';
+	src: url('../fonts/Cantarell-Oblique.eot');
+	src: local('Cantarell'), local('Cantarell-Oblique'), url('../fonts/Cantarell-Oblique.woff') format('woff'), url('../fonts/Cantarell-Oblique.ttf') format('truetype'), url('../fonts/Cantarell-Oblique.svg#Cantarell-Oblique') format('svg');
+}
+
+@font-face {
+	font-family: 'CantarellBold';
+	src: url('../fonts/Cantarell-Bold.eot');
+	src: local('Cantarell'), local('Cantarell-Bold'), url('../fonts/Cantarell-Bold.woff') format('woff'), url('../fonts/Cantarell-Bold.ttf') format('truetype'), url('../fonts/Cantarell-Bold.svg#Cantarell-Bold') format('svg');
+}
+
+@font-face {
+	font-family: 'CantarellBoldOblique';
+	src: url('../fonts/Cantarell-BoldOblique.eot');
+	src: local('Cantarell'), local('Cantarell-BoldOblique'), url('../fonts/Cantarell-BoldOblique.woff') format('woff'), url('../fonts/Cantarell-BoldOblique.ttf') format('truetype'), url('../fonts/Cantarell-BoldOblique.svg#Cantarell-BoldOblique') format('svg');
+}
+
+@font-face {
+	font-family: 'GoudyBookletter1911Regular';
+	src: url('../fonts/goudybookletter1911.eot');
+	src: local('Goudy Bookletter 1911'), local('GoudyBookletter1911'), url('../fonts/goudybookletter1911.woff') format('woff'), url('../fonts/goudybookletter1911.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'LatinModernMono10Regular';
+	src: url('../fonts/lmmono10-regular.eot');
+	src: local('Latin Modern Mono'), local('LMMono10-Regular'), url('../fonts/lmmono10-regular.woff') format('woff'), url('../fonts/lmmono10-regular.ttf') format('truetype'), url('../fonts/lmmono10-regular.svg#LMMono10-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMono10Italic';
+	src: url('../fonts/lmmono10-italic.eot');
+	src: local('Latin Modern Mono'), local('LMMono10-Italic'), url('../fonts/lmmono10-italic.woff') format('woff'), url('../fonts/lmmono10-italic.ttf') format('truetype'), url('../fonts/lmmono10-italic.svg#LMMono10-Italic') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoCaps10Regular';
+	src: url('../fonts/lmmonocaps10-regular.eot');
+	src: local('Latin Modern Mono Caps'), local('LMMonoCaps10-Regular'), url('../fonts/lmmonocaps10-regular.woff') format('woff'), url('../fonts/lmmonocaps10-regular.ttf') format('truetype'), url('../fonts/lmmonocaps10-regular.svg#LMMonoCaps10-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoCaps10Oblique';
+	src: url('../fonts/lmmonocaps10-oblique.eot');
+	src: local('Latin Modern Mono Caps'), local('LMMonoCaps10-Oblique'), url('../fonts/lmmonocaps10-oblique.woff') format('woff'), url('../fonts/lmmonocaps10-oblique.ttf') format('truetype'), url('../fonts/lmmonocaps10-oblique.svg#LMMonoCaps10-Oblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoLight10Oblique';
+	src: url('../fonts/lmmonolt10-oblique.eot');
+	src: local('Latin Modern Mono Light'), local('LMMonoLt10-Oblique'), url('../fonts/lmmonolt10-oblique.woff') format('woff'), url('../fonts/lmmonolt10-oblique.ttf') format('truetype'), url('../fonts/lmmonolt10-oblique.svg#LMMonoLt10-Oblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoLight10Regular';
+	src: url('../fonts/lmmonolt10-regular.eot');
+	src: local('Latin Modern Mono Light'), local('LMMonoLt10-Regular'), url('../fonts/lmmonolt10-regular.woff') format('woff'), url('../fonts/lmmonolt10-regular.ttf') format('truetype'), url('../fonts/lmmonolt10-regular.svg#LMMonoLt10-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoLight10Bold';
+	src: url('../fonts/lmmonolt10-bold.eot');
+	src: local('Latin Modern Mono Light'), local('LMMonoLt10-Bold'), url('../fonts/lmmonolt10-bold.woff') format('woff'), url('../fonts/lmmonolt10-bold.ttf') format('truetype'), url('../fonts/lmmonolt10-bold.svg#LMMonoLt10-Bold') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoLight10BoldObl';
+	src: url('../fonts/lmmonolt10-boldoblique.eot');
+	src: local('Latin Modern Mono Light'), local('LMMonoLt10-BoldOblique'), url('../fonts/lmmonolt10-boldoblique.woff') format('woff'), url('../fonts/lmmonolt10-boldoblique.ttf') format('truetype'), url('../fonts/lmmonolt10-boldoblique.svg#LMMonoLt10-BoldOblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoLightCond10Reg';
+	src: url('../fonts/lmmonoltcond10-regular.eot');
+	src: local('Latin Modern Mono Light Cond'), local('LMMonoLtCond10-Regular'), url('../fonts/lmmonoltcond10-regular.woff') format('woff'), url('../fonts/lmmonoltcond10-regular.ttf') format('truetype'), url('../fonts/lmmonoltcond10-regular.svg#LMMonoLtCond10-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoLightCond10Obl';
+	src: url('../fonts/lmmonoltcond10-oblique.eot');
+	src: local('Latin Modern Mono Light Cond'), local('LMMonoLtCond10-Oblique'), url('../fonts/lmmonoltcond10-oblique.woff') format('woff'), url('../fonts/lmmonoltcond10-oblique.ttf') format('truetype'), url('../fonts/lmmonoltcond10-oblique.svg#LMMonoLtCond10-Oblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoProp10Regular';
+	src: url('../fonts/lmmonoprop10-regular.eot');
+	src: local('Latin Modern Mono Prop'), local('LMMonoProp10-Regular'), url('../fonts/lmmonoprop10-regular.woff') format('woff'), url('../fonts/lmmonoprop10-regular.ttf') format('truetype'), url('../fonts/lmmonoprop10-regular.svg#LMMonoProp10-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoProp10Oblique';
+	src: url('../fonts/lmmonoprop10-oblique.eot');
+	src: local('Latin Modern Mono Prop'), local('LMMonoProp10-Oblique'), url('../fonts/lmmonoprop10-oblique.woff') format('woff'), url('../fonts/lmmonoprop10-oblique.ttf') format('truetype'), url('../fonts/lmmonoprop10-oblique.svg#LMMonoProp10-Oblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoPropLight10Reg';
+	src: url('../fonts/lmmonoproplt10-regular.eot');
+	src: local('Latin Modern Mono Prop Light'), local('LMMonoPropLt10-Regular'), url('../fonts/lmmonoproplt10-regular.woff') format('woff'), url('../fonts/lmmonoproplt10-regular.ttf') format('truetype'), url('../fonts/lmmonoproplt10-regular.svg#LMMonoPropLt10-Regular') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoPropLight10Obl';
+	src: url('../fonts/lmmonoproplt10-oblique.eot');
+	src: local('Latin Modern Mono Prop Light'), local('LMMonoPropLt10-Oblique'), url('../fonts/lmmonoproplt10-oblique.woff') format('woff'), url('../fonts/lmmonoproplt10-oblique.ttf') format('truetype'), url('../fonts/lmmonoproplt10-oblique.svg#LMMonoPropLt10-Oblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoPropLight10Bol';
+	src: url('../fonts/lmmonoproplt10-bold.eot');
+	src: local('Latin Modern Mono Prop Light'), local('LMMonoPropLt10-Bold'), url('../fonts/lmmonoproplt10-bold.woff') format('woff'), url('../fonts/lmmonoproplt10-bold.ttf') format('truetype'), url('../fonts/lmmonoproplt10-bold.svg#LMMonoPropLt10-Bold') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoPropLight10Bol';
+	src: url('../fonts/lmmonoproplt10-boldoblique.eot');
+	src: local('Latin Modern Mono Prop Light'), local('LMMonoPropLt10-BoldOblique'), url('../fonts/lmmonoproplt10-boldoblique.woff') format('woff'), url('../fonts/lmmonoproplt10-boldoblique.ttf') format('truetype'), url('../fonts/lmmonoproplt10-boldoblique.svg#LMMonoPropLt10-BoldOblique') format('svg');
+}
+
+@font-face {
+	font-family: 'LatinModernMonoSlanted10Regul';
+	src: url('../fonts/lmmonoslant10-regular.eot');
+	src: local('Latin Modern Mono Slanted'), local('LMMonoSlant10-Regular'), url('../fonts/lmmonoslant10-regular.woff') format('woff'), url('../fonts/lmmonoslant10-regular.ttf') format('truetype'), url('../fonts/lmmonoslant10-regular.svg#LMMonoSlant10-Regular') format('svg');
+}
+

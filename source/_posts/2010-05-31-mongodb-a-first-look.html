@@ -1,0 +1,202 @@
+--- 
+layout: post
+title: "MongoDB: A first look"
+---
+<p>The entire subject of two talks and mentioned in several other, <a href="http://www.mongodb.org/">MongoDB</a> was
+definitely a buzz at <a href="http://tek.phparch.com/">TekX</a> this year.  It's long been in favor in the tech
+community in Lawrence and has been used for some data crunching for a few
+projects at the local paper.  Even with all of this exposure, I've yet to sit
+down and actually explore it.</p>
+<p>That changed Friday afternoon while I sat at O'Hare waiting on my flight back
+to Lawrence (which subsequently got canceled).  I installed Mongo earlier in
+the week and opened up a bunch of tabs on the various intros and tutorials
+available on the <a href="http://www.mongodb.org/display/DOCS/Home">Mongo wiki</a>.  The rest of this article a mix of
+stream-of-conscious as I played around with Mongo for the first time and some
+of my reflections this past week.</p>
+<h4>Note on typefaces</h4>
+<p>I use both Mongo and <code>mongo</code> throughout this article.  The first, the
+title-case Mongo refers to the software as a whole.  Whenever you see <code>mongo</code>
+with a lowercase and in <code>monospace</code>, it's referring to the Mongo client program
+you run from the command line.</p>
+<h3>Installation</h3>
+<p>On a Mac, it's a breeze.  I use <a href="http://mxcl.github.com/homebrew/">Homebrew</a> to manage software on my Mac, so a
+quick <code>brew install mongodb</code> was all I needed and a minute later I was ready to
+go.</p>
+<h3>Starting Up the Server</h3>
+<p>Mongo is run by the <code>mongod</code> process.  I don't know if it's pronounced
+<em>mongo-d</em> or <em>mon-god</em> though.  It's a fun play on words if the latter is the
+case.</p>
+<p>Brew includes a basic configuration to get up and running, so I use that inside
+a <code>screen</code> instance so I can leave it running in the background while I use the
+<code>mongo</code> tool to interact with it.</p>
+<h3>Interacting with Mongo</h3>
+<p>I started out with the <a href="http://www.mongodb.org/display/DOCS/Tutorial">basic tutorial</a> to get going.  It looks like that
+needs some love though.  It shows the version in the startup as 0.9.8.
+Homebrew ships with 1.4.2 and I did find a few things that were out of date.
+No, I' haven't been a good open source community member and submitted fixes
+yet.</p>
+<p>The first thing that's different than a traditional RMDBS with Mongo is that
+you don't have to explicitly create a database.  Pretty straight forward: from
+within <code>mongo</code>, type <code>use &lt;database&gt;</code>.  This creates a brand new database for
+you and you're off.  For the examples below, I'm using <code>use mydb</code> to select
+<code>mydb</code> as my database.</p>
+<p>It's kind of nice to just be able to connect and go, but it feels odd.  Not
+good or bad, just odd.  Sort of like the first time you run <code>git checkout</code>
+inside a repository to switch branches when you're used to Subversion.</p>
+<p>The shell feels like a Javascript console.  I don't have access to the source
+code in my off-line mode, so I don't know but that it is.  The syntax seems
+remarkably similar, so it's at least Javascript inspired.</p>
+<h3>Adding Records</h3>
+<p>Mongo stores documents, not rows of columns.  This distinction allows Mongo to
+ignore schema&mdash;continuing the theme of leaving it up to the developer.
+Those documents can be made up any number key-values that look remarkably like
+JSON.  Need to store a new data point, just add it as a field to a document
+and you're set.</p>
+<p>Here's an example inspired by Mongo's tutorial for adding a few records:</p>
+<pre><code>&gt; person = {name: "Travis Swicegood"}
+&gt; city = {city: "Lawrence", state: "KS"}
+&gt; db.things.save(person)
+&gt; db.things.save(city)
+</code></pre>
+<p>Here I created two new objects with various data attached to them, then saved
+them all inside the <code>things</code> collection.  Collections in Mongo are like a table
+inside the SQL world.  You don't have to create a collection, you just declare
+it on the <code>db</code> object, and you're set.</p>
+<p>Comparing this to the same code in a database, I've got to say I love this.  No
+boilerplate code to get going.  I didn't have to create a database, no tables
+were created.  I just started using them.  This appeals to my
+laziness&mdash;err, I mean desire for efficiency, but also looks very promising
+to teach someone new.  Every abstract idea you can remove is one less potential
+stumbling block for someone starting out.</p>
+<p>Back to the data I entered.  Notice that neither have the same fields.
+Collections inside Mongo are made up of a series of keys and values&mdash;they
+can be whatever you want them to be.  This is perfect for lazy migrations:
+migrating the data as its requested instead of doing it all at once.  <a href="http://merciless.sourceforge.net/">ming</a>,
+a Python wrapper around Mongo <a href="http://merciless.sourceforge.net/tour.html#specifying-a-migration">already provides this</a>.  This is especially
+useful for large sites with lots of data that may or may not ever been
+requested again.<br />
+</p>
+<h3>Finding Records</h3>
+<p>Now that the records are there, finding them.  The <code>db.things</code> object comes
+back now:</p>
+<pre><code>&gt; db.things.find()
+{ "_id" : ObjectId("4bf9a96b7d04f51b48499011"), "name" : "Travis Swicegood" }
+{ "_id" : ObjectId("4bf9a96f7d04f51b48499012"), "city" : "Lawrence", "state" : "KS" }
+</code></pre>
+<p>That gives me everything.  The <code>find</code> method takes optional parameters to
+filter the results.  This is actually a good time to bring up the built-in help
+in <code>mongo</code>.  Entering only the value of any function (i.e., without calling it)
+displays the implementation of the function:</p>
+<pre><code>&gt; db.things.find
+function (query, fields, limit, skip) {
+    return new DBQuery(
+        this._mongo, this._db, this, this._fullName,
+        this._massageObject(query), fields, limit, skip);
+}
+</code></pre>
+<p><em>Note:</em> I changed the formatting so it's more easily viewable online.</p>
+<p>The parameters are optional (like all Javascript function), so you can pass in
+as many or as few as you want.  Filtering the results is done by providing a
+hash for the <code>query</code> parameter (the first one).  For example, to find my
+record:</p>
+<pre><code>&gt; db.things.find({name: "Travis Swicegood"})
+{ "_id" : ObjectId("4bf9a96b7d04f51b48499011"),
+  "name" : "Travis Swicegood" }
+</code></pre>
+<p>One thing you can't do is full-text searching.  I can't ask for all of the
+records that begin with <code>Travis</code> or have a portion of my name in it.  The
+current recommendation (at least via the wiki) is to build your own list of
+keywords as an array, then search that array.  For example:</p>
+<pre><code>&gt; var person2 = {name: "Travis Swicegood",
+&gt;                name_field: ["Travis", "Swicegood"]};
+&gt; db.things.save(person2)
+&gt; db.things.find({name_field: "Travis"})
+{ "_id" : ObjectId("4bf9afa17d04f51b48499014"),
+  "name" : "Travis Swicegood", 
+  "name_field" : [ "Travis", "Swicegood" ] }
+</code></pre>
+<p>For something like a name, this can be useful.  For full-text searching of an
+article, it's probably best to delegate searching off to something like
+<a href="http://lucene.apache.org/solr/">Solr</a> and let Mongo focus on storage and retrieval.</p>
+<h4>Querying for sub-objects</h4>
+<p>Of course, I had to try sub-objects to see if they would work:</p>
+<pre><code>&gt; db.things.find({person: person2})
+{ "_id" : ObjectId("4bf9b02b7d04f51b48499015"), 
+  "person" : { "name" : "Travis Swicegood",
+               "name_field" : [ "Travis", "Swicegood" ],
+               "_id" : ObjectId("4bf9afa17d04f51b48499014") },
+  "city" : { "city" : "Lawrence",
+             "state" : "KS",
+             "_id" : ObjectId("4bf9a96f7d04f51b48499012") } }
+</code></pre>
+<p>You can also query using the dot-notation to &lquot;reach through&rquot; an
+object and look at its children.  This returns the same result as the previous
+query:</p>
+<pre><code>&gt; db.things.find({"person.name_field": "Travis"})
+</code></pre>
+<h4>Limiting returned columns</h4>
+<p>This ability to dynamically add columns to a record and definitely provides a
+breading ground for massive documents with lots of keys.  Most of the time a
+small subset of those keys are all that's needed.  The second parameter in <code>find</code>
+provides us with that functionality:</p>
+<pre><code>&gt; db.things.find({person: person2}, {city:1})  
+{ "_id" : ObjectId("4bf9b02b7d04f51b48499015"), 
+  "city" : { "city" : "Lawrence",
+             "state" : "KS",
+             "_id" : ObjectId("4bf9a96f7d04f51b48499012") } }
+</code></pre>
+<p>Likewise, you can reach through the object and pull out a subfield:</p>
+<pre><code>&gt; db.things.find({person: person2}, {"city.state":1})
+{ "_id" : ObjectId("4bf9b02b7d04f51b48499015"), 
+  "city" : { "state" : "KS" } }
+</code></pre>
+<p>These examples bring up a syntax thing with Mongo that I'm not crazy about: the
+use of the number one.  It's the standard C style: 1 is true, 0 is false.  I'd
+love to see the client and the libraries adopt an intent revealing name.
+Granted, this is a minor niggle, but the little things are what make a good
+system an amazing one.</p>
+<h3>Few issues</h3>
+<p>The docs, being that they are community run and Mongo's still relatively new,
+are a little loose.  I've found a bunch of examples looking through them that
+don't work the way they were documented.</p>
+<p>Another potential issue (or at least something you need to be aware of) is that
+<a href="http://www.mongodb.org/display/DOCS/Geospatial+Indexing">Mongo's geospatial support</a> isn't 100% year.  They only provide 2d and the
+math they use assumes that 1&deg; of longitude is the same at the poles as it is at
+the equator.  For many applications, this isn't a <em>huge</em> issue, but if
+precision is important, Mongo's not ready for this type of use.</p>
+<p>One thing that I'm looking forward to is <a href="http://www.mongodb.org/display/DOCS/Sharding">Mongo's sharding</a>.  That is going
+to allow Mongo to scale horizontally really well.  Some of 
+<a href="http://www.snailinaturtleneck.com/blog/2010/05/05/with-a-name-like-mongo-it-has-to-be-good/">the initial test results</a> look amazing.  What will be really interesting is
+to see how well is scales down.  It's one thing to have over 300,000 ops/sec
+on a bigger box, another thing to be able to manage it on something like a 1gb
+instance on <a href="http://www.rackspacecloud.com/cloud_hosting_products/servers">Rackspace Cloudservers</a>.</p>
+<h3>Two Biggest Issues</h3>
+<p>First, Mongo's a master-slave system.  It appears really robust, but whenever a
+box takes on a special role I start to get nervous.  One of the promises of
+&lquot;NoSQL&rquot; is that it provides a tremendous amount of resilience.  Any
+time you start to add special nodes you're taking away from that.</p>
+<p>For example, if you're running 5 homogeneous servers and one goes down, the
+other 4 can pick up the slack&mdash;assuming you're not running 5 servers at
+peak capacity.  This makes failure planning easy: figure up the amount of CPU
+time you need to handle your load, provision that many servers, then add enough
+servers to be comfortable when they start failing.  Need 3 servers, provision 5
+and you can have two failures before you peg your machines.</p>
+<p>This isn't to say Mongo can't handle failures.  It's current model is
+rebalancing the load when one of the servers goes out.  <code>mongos</code> is the tool to
+read up on for handling this.  Unfortunately, I haven't been able to dive into
+it yet.  The only way to know for sure is to build up a cluster then start
+killing servers.  Of course, this type of testing is preferred for any data
+storage system.</p>
+<p>Second, the license.  I'm not anti-AGPL, but there's some ambiguity.  The Mongo
+team has addressed this both on the
+<a href="http://www.mongodb.org/display/DOCS/Licensing">wiki</a> and through an in-depth
+<a href="http://blog.mongodb.org/post/103832439/the-agpl">blog post</a>.  According to
+that, I can write up a service such as <a href="https://mongohq.com/">MongoHQ</a> and as long as I don't
+actually change the <code>mongod</code> or <code>mongos</code> code I'm fine.</p>
+<p>On the other hand, most of the definitions I've read of the AGPL mean that code
+that talks to it is subject to being hit with the AGPL.  I don't have any
+doubts with <a href="http://www.10gen.com/">10gen</a>, but if they don't always own the copyright&#133;</p>
+<p>Of course, those last two paragraphs are with the caveat I am not a lawyer.</p>
+<p>I think Mongo is an amazingly compelling piece of software in the non-standard
+database realm.  With the upcoming sharding and what I would have to imagine is
+an eminent fix to the geospatial queries, Mongo's definitely worth a look.</p>

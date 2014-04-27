@@ -1,0 +1,17 @@
+--- 
+layout: post
+title: Playing with BeepBeep and Flickr
+---
+<p>I love playing with <a href="http://erlang.org/">Erlang</a>.  I don't have much occasion to use it, but then a perfect opportunity presented itself.  <a href="http://blog.accordingtomegan.com/">Meg</a> and I bought a house, and me being the eternal geek that I am thought it'd be fun to build a site that aggregates all of the content we generate on our blogs, flickr, etc., that have to do with the house.  I could write a site in PHP that does this in a few hours, but where's the fun in that?  Instead, I've decided to implement it in <a href="http://github.com/davebryson/beepbeep/">BeepBeep</a>, a new Erlang, convention over configuration framework.</p>
+
+<p>If you're not familiar with BeepBeep, don't worry&mdash;not many people are.  It's the framework I would have built for Erlang had <a href="http://weblog.miceda.org/">Dave Bryson</a> not done it for me.  It uses <a href="http://code.google.com/p/mochiweb/">MochiWeb</a> for HTTP, <a href="http://code.google.com/p/erlydtl/">ErlyDTL</a>&mdash;an Erlang version of the Django Template Language&mdash;for templating, and a router to translate URLs into a controller and action.  The result?  This:</p>
+
+<div class="image_block"><img src="http://www.travisswicegood.com/media/blogs/travis/BeepBeep Flickr.jpg" alt="" title="" width="322" height="437" /></div><p> </p>
+
+<p>Ok - so it doesn't look like much, but those 20 images are being generated off of <a href="http://api.flickr.com/services/feeds/photos_public.gne?tags=lawrencee12th&amp;lang=en-us&amp;format=atom">this feed</a> of photos from Flickr.  It's nothing special, except that I had never worked with <a href="http://erlang.org/doc/apps/xmerl/index.html">xmerl</a> until this past week and it'd been nearly a year since I'd done anything with <a href="http://erlang.org/doc/apps/mnesia/index.html">Mnesia</a>.  What do those have to do with Flickr?  Well, there's no Flickr module for Erlang (yet), so I have to parse the raw XML that Flickr generates and I don't want to do that every request, so I'm using Mnesia to cache the photos from Flickr locally.</p>
+
+<p>I had originally started out with an in-memory cache for the photos, but this evening I rewrote the entire lib_cache module of my app to use Mnesia.  I still need to do the code that handles expiration, but that's coming.  Once I have that in place, I'll be ready to rock.  I don't have <a href="http://www.omnigroup.com/applications/omnigraffle/">OmniGraffle</a> installed on this computer or I would do up a diagram of the code.  I'll save that for another post. :-)</p>
+
+<p>Concurrency oriented programming is definitely fun.  At <a href="http://www.ning.com/">Ning</a>, we're always keeping an eye out for that sort of programming because of the <a href="http://siteanalytics.compete.com/ning.com/?metric=uv">volume of users</a> we have to deal with.  Why make a user wait when you can spawn off job in the background to do things like update caches, change data structures, and so on?  The fact that we're doing this in a language such as PHP just goes to show that it really is what you're doing with the language, not the language itself, but there's a part of me that wonders what would happen if a site like Ning was coded in a language such as Erlang that's built for concurrency.</p>
+
+<p>But I digress.  I've got some cool plans for my little BeepBeep site.  Keep an eye on this space for more articles as the site comes together.</p>

@@ -1,0 +1,29 @@
+--- 
+layout: post
+title: Select isn't broken
+---
+<blockquote><p>It is rare to find a bug in the OS or the compiler, or even a third-party product or library.  The bug is most likely in your application.</p></blockquote>
+
+<p>That's the 26<sup>th</sup> tip from Pragmatic Programmers.  There's a funny story on pages 96 - 97 about an engineer who spent weeks trying to work around a bug he thought he'd found in the <a href="http://www.sun.com/software/solaris/">Solaris</a> operating system.  After all of his work arounds failed, he was forced to go back over the documentation.  It's then that he found out what he was doing wrong and promptly fixed the problem.</p>
+
+<p>I read that story some half decade or more ago now, but I'd do good to remember it more often.  My mind jumps to the fanciful because it's more interesting.  Chasing down bugs in the language or database or someone else's code means you get to play with new stuff, and what's more important to my subconscious is that it means I didn't write the bad code.</p>
+
+<p>Working in new languages often brings this type of issue up.  Those first few toy scripts I write working through a book or online tutorial often fail.  I look over my code, find the problem, and fix it.  Once I've got a little bit of a handle on the language, though, I revert.  This just happened to me.</p>
+
+<p>I'm still working on my site.  Today I decided to refactor my <a href="http://flickr.com/">Flickr</a> integration into something a little more robust.  xmerl has proven unreliable in odd cases and I've read a lot of good things about <a href="http://erlsom.sourceforge.net/">Erlsom</a>, so I completely rewrote my XML parsing code to use Erlsom instead of xmerl, moved my <code>main_controller.erl</code> over to use the new code, and started running it.  Had a few simple errors, then I ran into a nasty error being thrown by <a href="http://code.google.com/p/erlydtl/">ErlyDTL</a>:</p>
+
+<pre><code>
+crasher:
+    pid: &lt;0.93.0>
+    registered_name: []
+    exception error: no function clause matching 
+                     proplists:get_value(square,
+... snipped ...
+</code></pre>
+<p></p>
+
+<p>And a huge big tuple followed that.  I ran the code again, same error.  Switched back over to the compiler, ran the code that was generated the square tuple and it came back fine.  If you're familiar with <code>proplists:get_value()</code> or ErlyDTL, you already know the problem.  I was passing in a tuple instead of a list.  The fix is two characters changed, but I was already a few hours into a hacking session, about the time I should have been taking a break, but instead, I was off to the races.</p>
+
+<p>I tracked the code down to erlydtl_runtime:fetch_value/2.  Ahh, it only handles atoms and <a href="http://erlsom.sourceforge.net/">Erlsom</a> returns the keys in its key/value pairs as lists.  Simple enough condition to check for on an error and recover from.  Wrote that up, tested it in the compiler, everything worked there.  Loaded it up, still getting errors.</p>
+
+<p>An hour later I discovered the tuple to list error.  I got so caught up in the problem being somewhere else that I missed the obvious information right in front of me.</p>

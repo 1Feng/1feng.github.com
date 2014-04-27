@@ -1,0 +1,124 @@
+--- 
+layout: post
+title: "assert(): Good or evil?"
+---
+<p>Obligatory warning: this is tech talk, so if you're not a programmer, your eyes may glaze over...</p>
+
+<p>Last week, <a href="http://blog.joshuaeichorn.com/">Josh Eichorn</a> and I got into a <a href="http://six.pairlist.net/pipermail/savant-talk/2005-August/001009.html">discussion</a> on the Savant mailing list about the use of <a href="http://www.php.net/assert">assert()</a> in PHP scripts.  Personally, I use them everywhere.  They're a great little tool for determining that things meet your expectations.  Josh was concerned that each call to assert() was evaluating the code contained and that was taking up resources.  Later that day, he <a href="http://blog.joshuaeichorn.com/archives/2005/08/01/using-eval-in-php/">posted a benchmark</a> on the use of eval().  </p>
+
+<!--more-->
+
+<p>He's partially correct.  assert() does call eval() whenever the the argument passed into it is a string.  The benefit to passing the assertion in as a string is that you get feedback as to what's happening.  Look at these examples:</p>
+
+<blockquote><p><code>&lt;?php assert('true == false'); ?&gt;</code></p></blockquote>
+<p>Which generates:</p>
+<blockquote><p><b>Warning</b>:  assert(): Assertion &quot;true == false&quot; failed in <b>true-false-single-quote.php</b> on line <b>1</b></p></blockquote>
+
+<p>And finally:</p>
+<blockquote><p><code>&lt;?php assert(true == false); ?&gt;</code></p></blockquote>
+<p>Which generates</p>
+<blockquote><p><b>Warning</b>:  assert(): Assertion failed in <b>true-false-no-quote.php</b> on line <b>1</b></p></blockquote>
+
+<p>As you can see, from a debugging standpoint, the single-quote assert() provides a quick reference as to what went wrong without having to load the code.  That can be a time saver, but the question we have to ask ourselves as programmers is 15 - 30 seconds of our time worth that many times over during the lifespan of the software we're creating?</p>
+
+<p>The only way to know this for sure is to run some benchmark tests.  Josh already put together a simple speed tester, and I've poached it and repurposed it for my tests.  The code is available in my <a href="https://svn.domain51.net/svn/articles/assert-good-or-evil/">Subversion server</a>, so I won't post it here.</p>
+
+<p>The first test we're going to run is just a <a href="https://svn.domain51.net/svn/articles/assert-good-or-evil/basicAssert.php">basic set of assert()</a> methods to see which performs the best.  In addition to comparing single-quote and no-quote assert()s, I've also thrown in the function my_assert() to see if it can operate any faster if I cut all the extra stuff that assert() has to do out.</p>
+
+<p>Here's the three lines we'll be testing:</p>
+
+<blockquote><p><code>assert('$b &lt; $i');<br />
+assert($b &lt; $i);<br />
+my_assert($b &lt; $i);</code></p></blockquote>
+
+<p>And the results from PHP 4.3.11 (ubuntu install):</p>
+<blockquote><p>Single quote assert: 1000000 times took 16.933998<br />
+Straight assert: 1000000 times took 1.708551<br />
+Using custom assert: 1000000 times took 2.727314</p></blockquote>
+
+<p>You can see right off the bat that Josh was right about the execution time.  Having assert() with single-quotes kills performance.  996% to be exact.  I'm going to leave all my single-quote asserts in place, however, because as the manual says, one of "[t]he advantages of a string assertion are less overhead when assertion checking is off..."  Using a quick <a href="https://svn.domain51.net/svn/articles/assert-good-or-evil/noQuote-vs-singleQuote.php">no quote vs single quote</a> test, there is a 25% reduction in speed once assertion checking is turned off when you use single-quotes.</p>
+
+<p>Back to the results quoted above, the next thing that's interesting with this is the execution of my_assert().  This shows the difference in executing compiled code versus parsed code.  assert(), even with the extra things it has to check, runs faster than straight PHP because it's compiled.</p>
+
+<!--nextpage-->
+<h3>Real world examples</h3>
+
+<p>This is fine, but we need to know what happens in real world examples.  The most common reason to need to force a particular type of value is SQL queries.  The one you see the most is a query to make sure that an ID is an integer.  Generally, the code goes something like this:</p>
+
+<blockquote><p><code>$sql = "SELECT * FROM posts WHERE id = " . intval($_GET['id']);</code></p></blockquote>
+
+<p>This works fine, until someone tries to insert something malicious via get[id], at which time your query returns an empty rowset.  This isn't a problem, unless you want to know it is going to fail prior to even sending the query.</p>
+
+<p>To do this, you have to implement an if() to insure that intval($_GET['id']) is going to return a greater than zero integer, or better yet, that intval($_GET['id']) == $_GET['id'].  Remember, PHP does not force typing and will attempt to convert types to make a best guess match.  The string "1" and the integer 1 will both match each other.</p>
+
+<p>So with this in hand, let's try running the assert(), and making sure that whatever is inserted into the query is an integer.  Since we're looking at best practices, I'm going to test two methods of creating the query: the standard of adding it dynamically to the string, and the non-standard, but one I favor, where we use sprintf() to handle the type-casting.</p>
+
+<p>Here's what the three blocks of code we're testing:</p>
+
+<blockquote><p><code><br />
+// Dynamically change<br />
+assert($i == intval($i));<br />
+$sql = "SELECT * FROM posts WHERE id = " . intval($i);<br />
+<br />
+// Re-assign at the start<br />
+assert($i == intval($i));<br />
+$i = intval($i);<br />
+$sql = "SELECT * FROM posts WHERE id = " . $i;<br />
+<br />
+// Filter via sprintf()<br />
+assert($i == intval($i));<br />
+$sql = sprintf("SELECT * FROM posts WHERE id = %d", $i);</code></p></blockquote>
+
+<p>The results from <a href="https://svn.domain51.net/svn/articles/assert-good-or-evil/realWorldAssert.php">this test</a> are a lot closer, but something interesting happened when I ran the code the second time:</p>
+<blockquote><p><em>First run</em><br />
+Dynamic change: 1000000 times took 5.001196<br />
+Re-assign: 1000000 times took 5.499048<br />
+sprintf(): 1000000 times took 4.669491</p>
+
+<p><em>Second run (immediately after)</em><br />
+Dynamic change: 1000000 times took 4.099901<br />
+Re-assign: 1000000 times took 4.599407<br />
+sprintf(): 1000000 times took 4.644968</p></blockquote>
+
+<p>PHP caches the results from the first run, and using straight PHP runs faster.  After looking at these results, we can see that re-assigning $i in the second block makes no sense.  Now the question comes down to using a dynamic string, or sprintf().  If every fraction of second counts for your code, I would say use the first where $i is converted at the last second.  If being able to duplicate your codes execution time or readability is important, use sprintf().  </p>
+
+<p>Again, this shows that execution of the compiled parts of PHP are much more predictable.  In the second run, sprintf() only gained .02 seconds, while the using the string gained a full second, or 20%!  </p>
+
+<p>(note: After the 2 or 3 minutes it took to write these few paragraphs after the tests, I re-ran the benchmark code.  sprintf() was still at 4.64x, while the other two had both move up to 4.1x and 4.6x respectively.)</p>
+
+<!--nextpage-->
+<h3>Comparing assert() to other solutions</h3>
+
+<p>I've settled on sprintf() being the way to handle changing types.  It keeps everything clean, and insures that the value I'm working with is in the original format that it was passed in as.  This is a personal call that you will have to make for your code.</p>
+
+<p>Now the thing to determine is how to implement error checking.  In order for it to be useful, we'll need a means of turning it off.  assert_options() provides us with a standard way of turning things off so we'll work under the assumption that if assert()s are disabled, we won't perform our error checking.  There are three ways to check that our $i value is a valid integer, or capable of becoming one without losing data.</p>
+
+<ul><li>assert()</li>
+<li>check_int()</li>
+<li>hard coded if()</li></ul>
+
+<p>There is a forth way.  You could implement check_int_strict() which will insure that the value is an integer to begin with, but that removes the ability to convert strings dynamically to an integer, so I haven't included that here.</p>
+
+<p>Here's the results from our <a href="https://svn.domain51.net/svn/articles/assert-good-or-evil/realWorldAssert2.php">final test</a>:</p>
+
+<blockquote><p>Straight assert using sprintf: 1000000 times took 4.502889<br />
+Using check_int(): 1000000 times took 5.623649<br />
+Using hard coded checking: 1000000 times took 4.234395</p></blockquote>
+
+<p>As our first test showed, using custom methods isn't really the best solution; compiled code runs faster than parsed code.  The first and last are remarkably close.  Again, the more simple the code is, the faster it runs: if() as a control structure runs faster than assert() as a function.</p>
+
+<p>This test does leave one crucial part out, however.  In my test, assert() accounts for one line and the if() accounts for three lines that are iterated over.  In a real-world implementation where there was 1 million asserts to run (a stretch, to be sure, but I guess it could happen), it would account for 1 million lines of code.  The if() statement which now only accounts for 3 lines would balloon to 3 million lines of code in production.  Any gain in execution speed from using if() instead of assert() would probably be knocked out by the 3-fold increase in filesize.</p>
+
+<!--nextpage-->
+<h3>In closing</h3>
+<p>So is assert() good or evil?  Well, in some uses it can really slow down your code.  Something I had done out of habit, using single-quotes, can take up time that is not necessary if you intend to leave assert()'s turned on in the production version of your code.</p>
+
+<p>As for their general use, its a personal choice.  Personally, I'll continue to use them coupled with sprintf().  It simplifies the code to have a series of assert() calls at the top of a method so future developers can see immediately what is expected.</p>
+
+<p>With all good tools, there is a time and a place to use them.  They should not be used to control how a method behaves.  To quote from the PHP manual:</p>
+
+<blockquote><p>Assertions should be used as a debugging feature only. You may use them for sanity-checks that test for conditions that should always be <strong>TRUE</strong> and that indicate some programming errors if not or to check for the presence of certain features like extension functions or certain system limits and features.</p></blockquote>
+
+<p>If a method can run when a something evaluates to false, you don't want to use an assert().  In other words, if an assert() fails it should be a show stopper.</p>
+
+<p>Hope some of you have found this interesting...</p>

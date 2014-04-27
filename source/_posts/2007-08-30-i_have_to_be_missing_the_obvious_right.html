@@ -1,0 +1,9 @@
+--- 
+layout: post
+title: I have to be missing the obvious... right?
+---
+<p>I've been meaning to play with the new <a href="http://www.eclipse.org/pdt">PDT</a> (PHP Development Toolkit) and tonight I decided to.  I find it amusing that this project aims to be <em>the</em> PHP editor, yet the defacto PHP test format, phpt, isn't recognized as a PHP file by default.  Shows you priorities I guess...</p>
+
+<p>But that's not my problem; I figured out how to get that working quickly enough.  What's causing issues is <i>Run As > PHP Script</i> which isn't outputting anything.  If I use <i>Debug As</i> I get the output I expect, albeit with a stop or two in the process when the debugger halts the execution.  This seems like something obvious.  No, I'm sure it has to be something obvious.  Where's my output?  I've checked the Console (where it is outputted like I expected when I'm debugging), the Browser Output... nada.</p>
+
+<p>Anyone out there know what I'm missing?  I'm using xdebug2 with a hand-compiled version of 5.2.3.  I installed PDT using the all-in-one S20070826-M3.  It works as expected running from the console, via Apache and mod_php, and from Komodo IDE.  This one just doesn't make sense.</p>

@@ -1,0 +1,17 @@
+--- 
+layout: post
+title: The Internet is an Orgy
+---
+<p>Ever since <a href="http://www.travisswicegood.com/index.php/2007/10/19/terry_chay_isn_t_into_orgies">I mis-titled</a> <a href="http://terrychay.com/blog/">Terry Chay's</a> talk, I've been thinking of putting together a presentation called <em>The Internet is an Orgy</em>.  Just like a real orgy, it can be a lot of fun but it just takes one person to screw everyone.</p>
+
+<p>That point has been getting proven today.  <a href="http://www.amazon.com/gp/browse.html?node=16427261">Amazon's S3</a> service is experiencing it's second outage of the year.  According to <a href="http://status.aws.amazon.com/">Amazon's status site</a>, they're been down for roughly 6 hours right now.  Sites like <a href="http://smugmug.com/">SmugMug</a> are completely down as they rely 100% on S3 to serve photos from.  Avatars on Twitter are broken because Twitter uses S3 to offload that content.</p>
+
+<p>And the poor people using EC2.  EC2 isn't directly effected, but you have to have access to S3 in order to bring up another server.  This is six hours that you've had to make due with just the servers you have running right now.  All of that "elasticity" is just that - a marketing word in air quotes if you can't bring more servers online.</p>
+
+<p>Don't think you're immune to this type of problem just because you're a consumer.  Case in point, if <a href="http://ma.gnolia.com">Ma.gnolia</a> goes down I loose access to all of my bookmarks and the ability to store anything else.  I <a href="http://ma.gnolia.com/people/tswicegood/">bookmark</a> a lot when I'm wondering around the web.</p>
+
+<p>I've <a href="http://www.travisswicegood.com/index.php/2007/10/17/twitterific_distributed_versus_centraliz">blogged about distributed systems</a> before though.  Whenever I see a central point of failure, I cringe, but we move more and more the way of the centralized which I feel is against the very grain of the internet.</p>
+
+<p>There are notable exceptions.  <a href="http://erlang.org/">Erlang</a>, my current favorite language, is designed to be distributed across machines with little more than a network connection and not fail if that connection disappears.  <a href="http://git.or.cz/">Git</a> enables distributed version control and is being used as a distributed data store for everything from open source projects to distributed ticket tracking systems. </p>
+
+<p>I'm sure if I looked, I could probably find a few more examples.  This isn't meant to be a riff on centralized services like Amazon's S3 or EC2.  They are great and can be very valuable to scale out quickly, especially when you're just starting out.  There is the proverbial "but", however.  Don't think they won't go down just like any other service  Treat them just like any other cluster.  If you can't afford downtime, have a backup plan.</p>

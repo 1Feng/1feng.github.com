@@ -1,0 +1,119 @@
+--- 
+layout: post
+title: Compiling Node.js on Ubuntu 9.04
+---
+<p>Someone pointed me to <a href="http://tinyclouds.org/node/">Node.js</a> a month or so again.  It's a web server that you interact with entirely in Javascript.  It uses Google's <a href="http://code.google.com/p/v8/">V8</a> engine and makes claims of being fast.  I've wanted to play with it on a real server for awhile.</p>
+
+<p>A few weeks ago I had an evening to play, so I spun up a few <a href="http://www.rackspacecloud.com/">cloud servers</a>, one to drive the test and another to actually run Node on.  I had compiled Node on my Macbook Pro the same day I saw it, it literally was a matter of three commands and I was up.  I didn't anticipate running into any issues, boy was I wrong.</p>
+
+<p>For those of you who are inpatient, here's the quick and dirty version of getting Node compiled.</p>
+
+<p>    sudo apt-get install build-essential libc6-dev-i386 lib32stdc++6 git-core &amp;&amp;<br />
+    sudo ln -s /usr/lib32/libstdc++.so.6 /usr/lib32/libstdc++.so &amp;&amp;<br />
+    git clone git://github.com/ry/node.git &amp;&amp;<br />
+    cd node &amp;&amp;<br />
+    ./configure &amp;&amp; make &amp;&amp; sudo make install</p>
+
+<p>That's out of the way, now I'm going to draw you into the whole saga.  Why?  Because I spent several hours trying to figure this out on my own and while having conversations with guys a lot smarter than I am.  Google turned up no help, so I figure writing a nice, long post with all of the errors you're going to get might prove a nice little Google honey pot and help someone out in the future when they go to try and figure this out.</p>
+
+<p>First up, Node requires that you build from source.  Since my Mosso box was starting from scratch, I needed to get the <code>build-essential</code> package installed along with <code>git-core</code> since I was planning on installing the latest development version from <a href="http://github.com/ry/node">Node's GitHub repository</a>.</p>
+
+<pre><code>$ sudo apt-get install build-essential git-core</code></pre>
+
+<p>Once that was installed, time to clone the repository and get started building.</p>
+
+
+<pre><code>$ git clone git://github.com/ry/node.git
+... output from clone ...
+$ cd node
+$ ./configure
+... output from configure ...
+$ make
+Waf: Entering directory `/home/travis/node/build'
+[ 1/19] deps/v8/libv8.a:  -> build/default/deps/v8/libv8.a
+gcc -o obj/release/dtoa-config.o -c -Werror -Wno-uninitialized -O3 -fomit-frame-pointer -fdata-sections -ffunction-sections -ansi -m32 -DV8_TARGET_ARCH_IA32 -DENABLE_LOGGING_AND_PROFILING -Isrc src/dtoa-config.c
+In file included from /usr/include/features.h:354,
+                 from /usr/include/endian.h:22,
+                 from src/dtoa-config.c:42:
+/usr/include/gnu/stubs.h:7:27: error: gnu/stubs-32.h: No such file or directory
+scons: *** [obj/release/dtoa-config.o] Error 1
+Waf: Leaving directory `/home/travis/node/build'
+Build failed
+ -> task failed (err #2): 
+	{task: deps/v8/libv8.a  -> libv8.a}
+make: *** [all] Error 1</code></pre>
+
+<p>Right out of the box.  Errors are popping up.  The problem is the missing <code>gnu/stubs-32.h</code> file.  Having this problem introduced me to a slick Ubuntu package called <code>apt-file</code>.  It works like <code>yum whatprovides</code> in Centos.  Once you install it and run <code>apt-file update</code>, finding missing files is a snap.  Case in point, our missing <code>gnu-stubs-32.h</code> file is located in <code>libc6-dev-i368</code>.</p>
+
+<pre><code>$ apt-file find gnu/stubs-32.h
+libc6-dev-i386: /usr/include/gnu/stubs-32.h</code></pre>
+
+<p>Now just a matter of installing that and running make again:</p>
+
+<pre><code>$ sudo apt-get install libc6-dev-i386
+... output from installation ...
+$ make
+Waf: Entering directory `/home/travis/node/build'
+[ 1/19] deps/v8/libv8.a:  -> build/default/deps/v8/libv8.a
+gcc ... etc., etc.</code></pre>
+
+<p>This starts to look promising.  A bunch of compile commands are issued and it looks like V8 is now compiling properly.  Until this hits my terminal a few minutes later:</p>
+
+<pre><code>g++ -o obj/release/mksnapshot -m32 obj/release/mksnapshot.o obj/release/libraries.o
+obj/release/dtoa-config.o obj/release/accessors.o obj/release/allocation.o
+... etc., etc., etc., then ...
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.so when searching for -lstdc++
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.a when searching for -lstdc++
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.so when searching for -lstdc++
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.a when searching for -lstdc++
+/usr/bin/ld: cannot find -lstdc++
+collect2: ld returned 1 exit status
+scons: *** [obj/release/mksnapshot] Error 1
+Waf: Leaving directory `/home/travis/node/build'
+Build failed
+ -> task failed (err #2): 
+	{task: deps/v8/libv8.a  -> libv8.a}
+make: *** [all] Error 1</code></pre>
+
+<p>So now it looks like we don't have the 32-bit version of the <code>libstdc++</code> package.  apt-file to the rescue again, this time with some grep magic to help filter down the results.</p>
+
+<pre><code>$ apt-file find libstdc++.so | grep 32 | egrep -v "gcc|ppu|dbg"
+ia32-libs: /usr/lib32/libstdc++.so.5
+ia32-libs: /usr/lib32/libstdc++.so.5.0.7
+lib32stdc++6: /usr/lib32/libstdc++.so.6
+lib32stdc++6: /usr/lib32/libstdc++.so.6.0.10</code></pre>
+
+<p>At this point I'm left guessing.  I go with <code>lib32stdc++6</code> because it's newer.  Makes sense to me, but I get the same output from <code>make</code> after I install it.  Off to Google I go.</p>
+
+<p>Since V8 seems to be the culprit, I start there in my searches.  Searching around for issues compiling V8 on Ubuntu, I turn up <a href="http://code.google.com/p/v8/issues/detail?id=22">this bug post</a> that's closed as fixed.  It doesn't immediately help, but searches keep sending me back to it.  I finally notice that I was compiling <code>mksnapshot</code> when I get the error and <a href="http://code.google.com/p/v8/issues/detail?id=22#c6">this comment</a> mentions <code>snapshot=off</code>.</p>
+
+<p>Now I've got something to go on.  Sure enough, Node's wscript file explicitly passes in <code>snapshot=on</code>.  I change that to off and oh happy day, I make it past the V8 compile.</p>
+
+<p>The happy day fell on the winter solstice or some such as it's short-lived.  I get to the final step of the compile and get practically the same message:</p>
+
+<pre><code>[19/19] cxx_link: build/default/src/node_5.o build/default/src/events_5.o build/default/src/http_5.o build/default/src/net_5.o build/default/src/file_5.o build/default/src/timer_5.o build/default/src/process_5.o build/default/src/constants_5.o -> build/default/node
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.so when searching for -lstdc++
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.a when searching for -lstdc++
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.so when searching for -lstdc++
+/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/4.3.3/libstdc++.a when searching for -lstdc++
+/usr/bin/ld: cannot find -lstdc++
+collect2: ld returned 1 exit status
+Waf: Leaving directory `/home/travis/node/build'
+Build failed
+ -> task failed (err #1): 
+	{task: cxx_link node_5.o,events_5.o,http_5.o,net_5.o,file_5.o,timer_5.o,process_5.o,constants_5.o -> node}
+make: *** [all] Error 1</code></pre>
+
+<p>At this point I'm perplexed.  I start asking around on IRC and end up chatting with <a href="http://netevil.org/">Wez</a> for a bit.  He knows a think or two about building code and starts leading me down the right path, but isn't able to provide the silver bullet that fixes my problems.</p>
+
+<p>Next stop is the #ubuntu IRC channel.  They're busy helping someone get Flash working on their desktop so there isn't much help there.</p>
+
+<p>At this point I'm trying to think of different ways to word my search.  I phrase it as plain English and end up searching for <a href="http://www.google.com/search?q=g%2B%2B+unable+to+find+32-bit+libstdc+ubuntu">g++ unable to find 32-bit libstdc ubuntu</a>.  The second result is titled <a href="http://ubuntuforums.org/showthread.php?t=1123473">g++ -m32 not finding lib32stdc++ libraries?</a> and is on the official Ubuntu forums site.  We might just have a winner.</p>
+
+<p>Sure enough, the first response mentions the missing symlink.  A quick <code>ln -s</code>, and we're off.</p>
+
+<pre><code>$ sudo ln -s /usr/lib32/libstdc++.so.6 /usr/lib32/libstdc++.so</code></pre>
+
+<p>Ran <code>make</code>, and low-and-behold, it worked!  There goes 6 hours of my life between the two evenings I devoted to figuring it out.  Hope this post keeps someone else from having to spin their wheels as much as I did.</p>
+
+<p>If you've made it this far and you're still reading, you might be wondering why I went to all of this trouble to track this down.  Well, the answer is simple, I'm really curious to see how well Node actually performs.  Now that I've got it running, expect to see some benchmarks soon.</p>

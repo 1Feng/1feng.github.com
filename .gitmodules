@@ -1,0 +1,18 @@
+[submodule "vendor/rfelix-extensions"]
+	path = vendor/rfelix-extensions
+	url = http://github.com/rfelix/my_jekyll_extensions.git
+[submodule "vendor/tswicegood-jekyll-extensions"]
+	path = vendor/tswicegood-jekyll-extensions
+	url = git://github.com/tswicegood/tswicegood-jekyll-extensions
+[submodule "source/talks/2013-02-austin-web-architecture-modern-http-architecture"]
+	path = source/talks/2013-02-austin-web-architecture-modern-http-architecture
+	url = git://github.com/tswicegood/modern-http-architecture.git
+[submodule ".themes/greyshade"]
+	path = .themes/greyshade
+	url = git://github.com/shashankmehta/greyshade.git
+[submodule ".themes/slash"]
+	path = .themes/slash
+	url = git://github.com/tommy351/Octopress-Theme-Slash.git
+[submodule ".themes/cleanpress"]
+	path = .themes/cleanpress
+	url = git://github.com/macjasp/cleanpress.git

@@ -1,0 +1,445 @@
+@import url('fonts.css');
+
+* { 
+    margin:0;
+    padding:0;
+    color: rgba(0, 0, 0, 0.75);
+    text-decoration:none;
+}
+html {
+    font-size:0.625em;
+    font-family:"CantarellRegular";
+}
+
+body {
+    background-color: #eee;
+    margin-left: 12em;
+}
+
+h1, h2, h3, h4, h5, p, blockquote {
+    font-size: 1.5em;
+    line-height: 1;
+    color: rgba(0,0,0, 0.75);
+}
+
+ol {
+    margin-left: 3.5em;
+}
+
+em,i { font-family: "CantarellOblique"; }
+strong, b { font-family: "CantarellBold"; }
+
+.article h1, .article h2, .article h3, .article h4, .article h5 {
+    line-height:1.5;
+}
+.article h2, .article h3, .article h4, .article h5 {
+    margin-top: 0.5em;
+}
+
+.article h1+h2,
+.article h1+h3 {
+    margin-top: 0;
+    margin-bottom: 0.5em;
+    margin-left: 1.2em;
+}
+
+.main_page .article .actions {
+    list-style: none;
+    font-family: "GoudyBookletter1911Regular";
+    height: 3.4em;
+    margin: 0;
+    padding: 0;
+    clear:both;
+}
+
+.main_page .article .actions li {
+    text-indent: 2.5em;
+    float:left;
+    font-size: 2.1em;
+    font-weight: bold;
+}
+.main_page .article {
+    border-bottom: 2px dashed rgba(0, 0, 0, 0.25);
+    margin-bottom: 6.8em;
+}
+
+p, blockquote {
+    line-height: 2;
+}
+
+h1, h2, h3, dl {
+    font-family: "GoudyBookletter1911Regular";
+}
+
+.pagination {
+    clear:both;
+    list-style:none;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.pagination li {
+    text-indent: 0;
+    width: 283px;
+    margin: 0;
+    padding: 0;
+    float:left;
+    margin-bottom: 2em;
+    height: 2em;
+}
+
+.pagination a {
+    text-align: center;
+    display:block;
+    width: 100%;
+    line-height: 2.1em;
+    font-family: "GoudyBookletter1911Regular";
+}
+
+
+.metadata {
+    width: 50%;
+    margin-left:-8.5em;
+    float:left;
+    font-size: 1.8em;
+    margin-bottom: 0.9em;
+    margin-right: 0.9em;
+    overflow:hidden;
+    line-height: 1.7em;
+}
+
+.metadata dl {
+    clear:both;
+}
+
+.metadata ul {
+    list-style:none;
+    margin-left: 8.5em;
+    padding:0;
+}
+
+.metadata li {
+    font-size: 1.0em;
+    float:left;
+    padding:0;
+    margin:0;
+    margin-right: 0.33em;
+    text-indent: 0;
+}
+
+.metadata dt {
+    width: 6em;
+    text-align: right;
+    float:left;
+    margin-left: 2em;
+    padding-right: 0.45em;
+    color: rgba(0, 0, 0, 0.5);
+}
+
+.metadata dd {
+    color: rgba(0, 0, 0, 0.75);
+}
+
+h2 { font-size: 6.8em; }
+h1 { font-size: 4.7em; }
+.article h2, h3 { font-size: 3.4em; margin-top:-0.5em; margin-left: .60em; font-style: italic; font-weight: normal;}
+h4 { font-size: 2.6em; font-style:italic; font-weight: bold; margin: 1em 2.5em;}
+h4 em { font-family: "CantarellBoldOblique"; }
+h5 { font-size: 2.1em; font-style: italic; font-weight: normal; }
+p, li { font-size: 1.5em; text-indent: 2.5em; margin-bottom: 1em; }
+
+blockquote {
+    margin: 1em 5em;
+    font-style: italic;
+    color: rgba(0,0,0, 0.675);
+}
+
+code {
+    font-family: "LatinModernMono10Regular"; 
+    font-size:1.1em;
+}
+
+p code {
+    border: 1px dashed rgba(0,0,0, 0.25);
+    border-radius: 0.5em;
+    background: rgba(0,0,0, 0.05);
+    padding: 0.1em 0.3em;
+}
+
+pre code {
+    background-color:rgba(0, 0, 0, 0.05);
+    display:block;
+    padding: 1em 2em 1em 1em;
+    margin: 1.5em 0.5em 2.5em 1.25em;
+    font-size: 1.25em;
+    border-radius: 0.5em;
+    -webkit-box-shadow: 0.25em 0.25em 0.5em rgba(0, 0, 0, 0.5);
+
+}
+
+
+p a {
+    border: 2px solid rgba(102, 153, 153, 0);
+    background-color:rgba(102, 153, 153, 0.25);
+    padding:0.2em;
+    -webkit-border-radius: 0.25em;
+}
+
+p a,
+p a:visited {
+    color: rgba(0,0,0, 0.75);
+}
+
+p a:hover,
+p a:visited:hover {
+    color: rgba(0, 0, 0, 1.0);
+}
+
+p a:hover {
+    background-color:rgba(102, 153, 153, 0.5);
+}
+
+p a:visited:hover {
+    border: 2px solid rgba(102, 153, 153, 0.0);
+    background-color:rgba(102, 153, 153, 0.75);
+}
+
+p a:visited:active {
+    border: 2px solid rgba(102, 153, 153, 0.75);
+    background-color:rgba(102, 153, 153, 0.75);
+    color: rgba(255,255,255, 0.75);
+}
+p a:active,
+p a:visited:active {
+    border: 2px solid rgba(102, 153, 153, 1.0);
+    color:rgba(102, 153, 153, 1.0);
+    background-color: rgba(255, 255,255, 0.75);
+}
+
+
+p a:visited {
+    border: 2px solid rgba(102, 153, 153, 0.0);
+    background-color:rgba(102, 153, 153, 0.5);
+}
+
+.header div {
+    width:960px;
+    margin:0 auto;
+}
+
+.header h2 {
+    font-size: 10em;
+    line-height: 1.1;
+    font-family: "GoudyBookletter1911Regular";
+    text-transform:lowercase;
+}
+
+.header h2 a {
+    color: #3b3b3b; /* rgba(0,0,0, 0.5); */
+}
+.header {
+    padding: 1em 2em;
+    margin:0 auto;
+    margin-left: -1em;
+
+}
+.header h2 span.lastname {
+    margin-left:-0.15em;
+    color: #868686; /* rgba(0, 0, 0, 0.25); */
+    text-shadow:none;
+    text-transform:lowercase;
+}
+
+#navigation {
+/** Used for absolutely positioning the nav
+    position: absolute;
+    top:7em;
+    right: 5em;
+    */
+    position:relative;
+    left:-2px;
+    height:5.1em;
+    width:360px;
+    top:0;
+    right:0;
+}
+#navigation ul {
+    position:absolute;
+    top:0;
+    list-style:none;
+}
+
+#navigation li {
+    float:left;
+    padding-top: 1.95em;
+
+}
+#navigation li a {
+    font-family: "GoudyBookletter1911Regular";
+    color: rgba(0, 0, 0, 0.5);
+    text-decoration:none;
+    font-weight:100;
+    display:block;
+    font-size:1.8em;
+    line-height:2;
+    text-align:center;
+    padding:0 .6em;
+    background-color: rgba(102, 153, 153, 0.5);
+    text-transform:lowercase;
+}
+#navigation li a:hover {
+    color: rgba(0, 0, 0, 0.75);
+    background-color: rgba(102, 153, 153, 1.0);
+}
+
+#navigation li:first-child {
+    border-left:none;
+}
+#navigation li {
+    border-left:0.1em solid rgba(255,255,255, 0.5);
+}
+
+#navigation li.first a {
+    -webkit-border-top-left-radius: 0.25em;
+    -webkit-border-bottom-left-radius: 0.25em;
+}
+
+#navigation li.last a{
+    -webkit-border-top-right-radius: 0.25em;
+    -webkit-border-bottom-right-radius: 0.25em;
+}
+
+#container {
+    width:960px;
+    margin:0 auto;
+}
+
+h1 + p, .metadata + p, h2 + p, h3 + p, h4 + p, h5 + p, blockquote p {
+    text-indent:0;
+}
+#content {
+    float:left;
+    width: 573px;
+}
+
+#column {
+    width:347px;
+    float:left;
+    margin-left:0;
+    margin:0;
+    margin-top:1.25em;
+    margin-left: 4em;
+    padding: 1.5em 0;
+    font-size: 1.0em;
+    float:left;
+}
+
+#column ul.external_links {
+    list-style:none;
+    margin: 0;
+    margin-bottom: 2.1em;
+    padding: 0
+}
+
+#column ul.external_links li {
+    margin: 0.25em 0;
+    padding: 0;
+    text-indent: 1.25em;
+}
+
+#column p {
+    font-size: 1.25em;
+}
+
+#column ul.external_links li {
+    color: rgba(0, 0, 0, 0.25);
+}
+
+#column ul.external_links li a {
+    color: rgba(0, 0, 0, 0.25);
+    font-family: "GoudyBookletter1911Regular";
+    font-size: 1.25em;
+}
+
+#column ul.external_links li a:hover {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+#column h5,
+#column p {
+    color:rgba(0,0,0, 0.25);
+}
+
+#column h5 {
+    font-family:"GoudyBookletter1911Regular";
+    font-style:normal;
+    font-weight: bold;
+}
+
+.av {
+    color:inherit;
+}
+
+#column .content {
+    margin-bottom: 2.5em;
+    padding: 1.3em 2.6em .25em;
+    -webkit-border-radius: 1.5em;
+}
+
+#column .content:hover h5,
+#column .content:hover p {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+#column .content:hover {
+    background-color: #eee;
+    background-image: -webkit-gradient(linear, left top, left bottom, from(white), to(#d7d7d7));
+    -webkit-box-shadow:0.25em 0.5em 1em rgba(0,0,0,0.3);
+}
+
+#comments h3 {
+    font-size: 2.6em;
+}
+
+#comments button {
+    font-family: "GoudyBookletter1911Regular";
+    font-size: 1.5em;
+}
+
+#comments .dsq-comment-footer-reply button,
+#comments .dsq-post-edit {
+    font-size: 0.95em;
+}
+
+fieldset {
+    border-radius: 0.5em;
+    border: 0;
+    background-color: #eee;
+    background-image: -webkit-gradient(linear, left top, left bottom, from(white), to(#d7d7d7));
+    -webkit-box-shadow:0.25em 0.5em 1em rgba(0,0,0,0.3);
+    padding: 0.1em 2.6em;
+    margin-bottom: 3.0em;
+}
+
+fieldset legend {
+    font-size: 2.6em;
+    font-family: "GoudyBookletter1911Regular";
+}
+
+fieldset p {
+    text-indent:0;
+}
+
+.article ul {
+    margin: 0 3.6em;
+    line-height: 1.75;
+}
+.article li {
+    text-indent: 0;
+}
+
+.thumbnail { margin: 2em auto; }
+.thumbnail.ted { width: 446px; }
+.thumbnail.fora { width: 400px; }
+.thumbnail.skitch { width: 380px; }

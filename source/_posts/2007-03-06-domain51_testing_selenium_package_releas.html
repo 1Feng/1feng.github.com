@@ -1,0 +1,21 @@
+--- 
+layout: post
+title: Domain51_Testing_Selenium package released
+---
+<p>If you know me as a programmer, you know I love <a href="http://en.wikipedia.org/wiki/Unit_testing">tests</a>.  Just in the last 4 months or so I started using <a href="http://openqa.org/selenium/">Selenium</a> to test web applications.  It's great, and with the <a href="http://openqa.org/selenium-ide/">IDE</a>, creating simple tests is a snap.  It doesn't take long before a simple test turns into something more complex.  You might need to setup or teardown some of the test elements so you know what to expect.</p>
+
+<p>In steps the something like <a href="http://simpletest.org">SimpleTest</a>.  There's been a <a href="http://pear.php.net/Testing_Selenium">Testing_Selenium</a> as part of <abbr title="PHP Extension and Application Repository">PEAR</abbr> for awhile now, but it implements an API that doesn't match up with Selenium-IDE.  In an effort to make the PHP interface with Selenium look the same as the IDE interface, I've release a new Domain51_Testing_Selenium.  It borrows heavily from the original TS package, but simplifies the code.  </p>
+
+<p>Without docs, I have a sub 100 line piece of code that provides the full Selenium-IDE API, considering the PEAR TS package is over 2500 lines (most of which are just docs, but it's still huge), I'm pretty happy.</p>
+
+<p>Few things to note: </p>
+
+<ol><li>No docs yet - only for the fearless :-)</li>
+<li>This version only supports cURL connections</li>
+<li>The instantiation (minus driver), and starting and stopping of tests work exactly like Testing_Selenium</li>
+<li>It's <a href="http://www.gnu.org/licenses/lgpl.html">LGPL</a> - Do whatever you want with it, but if you redistribute it, you have to do it <a href="http://www.fsf.org/licensing/essays/free-sw.html">freely</a> - as in speech, not beer.</li>
+</ol>
+
+<p>That last link is a good read if you want to get started on the "Commie-social-commune-treehugging-softare can change the world-did somebody say beer" bandwagon. :-)</p>
+
+<p>In case it's not self-evident (to my programming readers anyhow) how to use this, I put together a quick <a href="http://domain51.googlecode.com/svn/Domain51/trunk/tests/SeleniumAccessingGoogleTest.php">test case</a> using Google.  You can download the PEAR installable package <a href="http://domain51.googlecode.com/files/Domain51_Testing_Selenium-0.0.1.tgz">here</a>.</p>

@@ -1,0 +1,33 @@
+--- 
+layout: post
+title: Funny __toString() behavior
+---
+<p>So here's another behavior in PHP that's not quite what I expected, but not all that surprising.</p>
+
+<code><pre>&lt;?php
+
+class SomeClass {
+  public function __toString() {
+    return "hello!";
+  }
+}
+
+class SomeOtherClass {
+  public function __toString() {
+    return new SomeClass();
+  }
+}
+
+echo new SomeOtherClass();
+?>
+</pre></code><p></p>
+
+<p>Now, doesn't it seem that the echo should carry through to <code>SomeClass::__toString()</code>?  You'd think; but you get a fatal error instead.  It the "fix" isn't difficult:</p>
+
+<code><pre>class SomeOtherClass {
+  public function __toString() {
+    <strong>return (string)new SomeClass();</strong>
+  }
+</pre></code><p></p>
+
+<p>And from a performance standpoint, it is better to require a string be returned than try to guess.  Seemed odd, though, given PHP's loose typing.</p>

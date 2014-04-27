@@ -1,0 +1,35 @@
+--- 
+layout: post
+title: Fluent-API, here I come!
+---
+<p>One of the things that bugs me about PHP is that fluent APIs that were made possible by method chaining in PHP 5 are hindered by the new keyword.  In Python or Javascript it's possible to instantiate the object and continue chaining it.  An example in PHP syntax would be:</p>
+
+<code><pre>$result = new SQL()->select('*')
+                   ->from('users')
+                   ->where('username')
+                   ->like('travis%')
+                   ->execute();
+</pre></code><p></p>
+
+<p>In PHP, that "new" kills it.  However, this code would work:</p>
+
+<code><pre>$result = SQL()->select('*')
+               ->from('users')
+               ->where('username')
+               ->like('travis%')
+               ->execute();
+</pre></code><p></p>
+
+<p>All you have to do is define a function that has the same name as your class that wraps the new and off you go.  This falls into that "I guess I should have known" category.  Functions and classes aren't the same in PHP and since it will never going down the everything is an object road (unfortunately - if you've ever programmed in a language that has it you know what I mean) it would make sense that there wouldn't be any name clashing between a function and class of the same name.</p>
+
+<p>This means I can start removing all of the factory methods I have that do nothing but instantiate an object and return it.  Now I'll just slap a function in and away we go.</p>
+
+<p>As an extra benefit, interfaces fall into the same category as classes.  You can't have an interface and an object both named SQL, but either one with a function is fine.  This gives all sorts of new possibilities to a Dependency Injection Manager:</p>
+
+<code><pre>interface SQL {
+    public function query($query);
+}
+$sql = SQL();
+$sql instanceof SQL_Driver_MySQL;</pre></code><p></p>
+
+<p>Now, if I could just find a use for a DI manager that couldn't be solved by other means. :-)</p>

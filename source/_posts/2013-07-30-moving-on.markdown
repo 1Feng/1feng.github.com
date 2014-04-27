@@ -1,0 +1,39 @@
+---
+layout: post
+title: "Moving On"
+date: 2013-07-30 10:55
+comments: true
+categories:
+  - announcements
+  - job
+  - austin
+---
+I took over as the Director of Technology at the [Texas Tribune][] a year ago
+this month, but if you're reading this you probably already knew that.  What
+you probably don't know is that year ago June I had one foot out the door.  So
+what kept me at the Tribune?  A beer with Emily Ramshaw.
+
+She reminded me why I left the start-up world in the first place: to make a
+difference in the world with my work.  I do that at the Texas Tribune, but my
+role has always been a supporting one.  It needed to be given my straddling the
+business side, the editorial side, and everything in between.  I used to
+describe my job as not being on the front lines of changing the world, but I
+was the one supplying the ammo.
+
+I've realized over the last few months that I wanted that to dynamic to change.
+It became crystal clear in the early morning hours of June 26 as I watched
+tools I had help put in place shed a light on the inner workings of Texas
+politics.  Without our work, everyone would have read about the filibuster
+and questionable voting times the morning after instead of watching it happen
+live.
+
+I'm happy to announce that as of today, I'm moving on from Director of
+Technology at the Texas Tribune to the editorial staff as the Tribune's first
+News Apps and Data Editor.  I'll be continuing the amazing work that's already
+been done and working full time with Ryan Murphy on our newly formed News Apps
+team.
+
+I gotta say, I'm [super stoked][].
+
+[Texas Tribune]: http://www.texastribune.org/
+[super stoked]: http://www.theonion.com/video/report-most-college-males-admit-to-regularly-getti,14386/
