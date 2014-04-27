@@ -1,7 +1,0 @@
---- 
-layout: post
-title: "Never say die: compiling the git manual on OSX"
----
-<p>Last night I battled with my computer trying to get <a href="http://git.or.cz/">git's</a> manual to install.  Yes, I know they distribute the manual already packaged, but I have my git compiled from their repo, so why shouldn't my docs be in step?  I found a lot of info on <a href="http://wincent.com/knowledge-base/Installing_Git_1.5.2.3_on_Mac_OS_X_Tiger">this wiki</a> page that helped get me started in the right direction, but was still having issues.  Turns out, the latest version of <a href="http://cyberelk.net/tim/software/xmlto/">xmlto</a> uses a <code>cp -a</code> command which is a no-go on OSX.</p>
-
-<p>The fix is simple enough, on line 11 of <code>format/docbook/man</code>, change "<code>cp -a -- ...</code>" to "<code>cp -- ...</code>" and you're done.</p>
