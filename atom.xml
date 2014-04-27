@@ -4,7 +4,7 @@
   <title><![CDATA[1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-04-27T14:37:37+08:00</updated>
+  <updated>2014-04-27T14:40:30+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[1Feng]]></name>
@@ -19,15 +19,6 @@
     <updated>2014-04-27T14:35:00+08:00</updated>
     <id>http://erenno1.github.com/2014/04/27/hello-world</id>
     <content type="html"><![CDATA[
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Hello world]]></title>
-    <link href="http://erenno1.github.com/2014/04/27/hello-blog/"/>
-    <updated>2014-04-27T14:32:00+08:00</updated>
-    <id>http://erenno1.github.com/2014/04/27/hello-blog</id>
-    <content type="html"><![CDATA[<p>Hello, world!</p>
 ]]></content>
   </entry>
   
