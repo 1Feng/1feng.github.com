@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
 
-  <title><![CDATA[1Feng's Blog]]></title>
-  <link href="http://erenno1.github.com/atom.xml" rel="self"/>
+  <title><![CDATA[Category: hello | 1Feng's Blog]]></title>
+  <link href="http://erenno1.github.com/tags/hello/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
   <updated>2014-04-27T14:51:58+08:00</updated>
   <id>http://erenno1.github.com/</id>
@@ -12,15 +12,6 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
-  
-  <entry>
-    <title type="html"><![CDATA[std::bind in c++]]></title>
-    <link href="http://erenno1.github.com/2014/04/27/std-bind-in-c-plus-plus/"/>
-    <updated>2014-04-27T14:51:00+08:00</updated>
-    <id>http://erenno1.github.com/2014/04/27/std-bind-in-c-plus-plus</id>
-    <content type="html"><![CDATA[
-]]></content>
-  </entry>
   
   <entry>
     <title type="html"><![CDATA[hello world]]></title>
