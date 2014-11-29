@@ -4,7 +4,7 @@
   <title><![CDATA[Category: daemon | 1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/tags/daemon/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-11-29T17:08:34+08:00</updated>
+  <updated>2014-11-29T17:09:28+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -164,7 +164,7 @@ ssize_t len = write(fd_, pidstr.c_str(), pidstr.length());
 if(len &lt; 0)
 {
     //std::cerr &lt;&lt; "Write to /var/run/daemon_example.pid failed!"
-                &lt;&lt; std::endl;;
+    //          &lt;&lt; std::endl;;
     return false;
 }
 
