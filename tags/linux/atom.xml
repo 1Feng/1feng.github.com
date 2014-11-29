@@ -4,7 +4,7 @@
   <title><![CDATA[Category: linux | 1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/tags/linux/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-11-29T23:48:13+08:00</updated>
+  <updated>2014-11-29T23:52:17+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -81,7 +81,7 @@
 <h4>开机启动</h4>
 
 <ul>
-<li>参考/etc/init.d/skeleton 脚本</li>
+<li>参考/etc/init.d/skeleton 实现启动/停止脚本, 并使用update-rc.d添加为启动项</li>
 </ul>
 
 
