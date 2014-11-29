@@ -4,7 +4,7 @@
   <title><![CDATA[Category: linux | 1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/tags/linux/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-11-29T16:47:04+08:00</updated>
+  <updated>2014-11-29T16:57:59+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -18,11 +18,7 @@
     <link href="http://erenno1.github.com/2014/11/29/daemon-ho-to/"/>
     <updated>2014-11-29T16:46:00+08:00</updated>
     <id>http://erenno1.github.com/2014/11/29/daemon-ho-to</id>
-    <content type="html"><![CDATA[<h1>如何实现一个daemon</h1>
-
-<p>@(示例笔记本)[马克飞象|帮助|Markdown]</p>
-
-<p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
+    <content type="html"><![CDATA[<p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
 
 <hr />
 
@@ -35,12 +31,11 @@
 <li><strong>文件创建模式</strong> ：提高创建文件权限</li>
 <li><strong>屏蔽/接管信号</strong> ： 屏蔽或者接管部分signals处理</li>
 <li><strong>Single instance</strong> ： 可选</li>
+<li><strong>开机启动</strong> ：可选</li>
 </ul>
 
 
-<blockquote><p>Wikipedia <a href="https://en.wikipedia.org/wiki/Daemon_(computing">Daemon</a></p></blockquote>
-
-<h3>How to</h3>
+<h3>How to:</h3>
 
 <h4>修改文件创建模式屏蔽字</h4>
 
@@ -83,7 +78,14 @@
 </ul>
 
 
-<h3>Code example</h3>
+<h4>开机启动</h4>
+
+<ul>
+<li>参考/etc/init.d/skeleton 脚本</li>
+</ul>
+
+
+<h3>Code example:</h3>
 
 <p>``` cpp</p>
 
@@ -103,7 +105,7 @@ if (pid &lt; 0)
     std::cerr &lt;&lt; "First fock failed!" &lt;&lt; std::endl;;
     return false;
 }
-/* If we got a good PID, then   
+/* If we got a good PID, then
  * we can exit the parent process. */
 if (pid &gt; 0)
 {
@@ -115,26 +117,26 @@ if (pid &gt; 0)
 sid = setsid();
 if (sid &lt; 0)
 {
-    std::cerr &lt;&lt; "Setsid failed!" &lt;&lt; std::endl;; 
+    std::cerr &lt;&lt; "Setsid failed!" &lt;&lt; std::endl;;
     return false;
 }
 
 /* Fork off the second time */
 pid = fork();
 if (pid &lt; 0)
-{   
+{
     std::cerr &lt;&lt; "Second fork failed!" &lt;&lt; std::endl;;
     return false;
-}   
+}
 /* If we got a good PID, then
  * we can exit the parent process. */
 if (pid &gt; 0)
-{   
+{
     exit(EXIT_SUCCESS);
 }
 
 /* Ignore signals */
-signal(SIGCHLD, SIG_IGN); 
+signal(SIGCHLD, SIG_IGN);
 signal(SIGHUP, SIG_IGN);
 
  /* Change the current working directory */
@@ -161,7 +163,8 @@ std::string pidstr = stream.str();
 ssize_t len = write(fd_, pidstr.c_str(), pidstr.length());
 if(len &lt; 0)
 {
-    //std::cerr &lt;&lt; "Write to /var/run/daemon_example.pid failed!" &lt;&lt; std::endl;;
+    //std::cerr &lt;&lt; "Write to /var/run/daemon_example.pid failed!"
+                &lt;&lt; std::endl;;
     return false;
 }
 

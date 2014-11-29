@@ -7,8 +7,9 @@
 	<meta name="author" content="Travis Swicegood">
 
 	
-	<meta name="description" content="如何实现一个daemon @(示例笔记本)[马克飞象|帮助|Markdown] Linux下经常需要将服务程序实现为daemon（守护进程）。从而完成后台运行，开机启动，关机正常结束的功能。 Involves： 后台运行 ：摆脱tty控制
-根目录运行 ：切换工作目录至(/)， &hellip;">
+	<meta name="description" content="Linux下经常需要将服务程序实现为daemon（守护进程）。从而完成后台运行，开机启动，关机正常结束的功能。 Involves： 后台运行 ：摆脱tty控制
+根目录运行 ：切换工作目录至(/)，防止机器重启公路目录处于Unmount状态，导致进程无法正常工作
+标准io重定向 ：重定向stdin, &hellip;">
 	
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
@@ -80,11 +81,7 @@
 	
 	<div id="content" class="inner"><article class="post">
 	<h2 class="title">如何实现一个daemon</h2>
-	<div class="entry-content"><h1>如何实现一个daemon</h1>
-
-<p>@(示例笔记本)[马克飞象|帮助|Markdown]</p>
-
-<p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
+	<div class="entry-content"><p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
 
 <hr />
 
@@ -97,12 +94,11 @@
 <li><strong>文件创建模式</strong> ：提高创建文件权限</li>
 <li><strong>屏蔽/接管信号</strong> ： 屏蔽或者接管部分signals处理</li>
 <li><strong>Single instance</strong> ： 可选</li>
+<li><strong>开机启动</strong> ：可选</li>
 </ul>
 
 
-<blockquote><p>Wikipedia <a href="https://en.wikipedia.org/wiki/Daemon_(computing">Daemon</a></p></blockquote>
-
-<h3>How to</h3>
+<h3>How to:</h3>
 
 <h4>修改文件创建模式屏蔽字</h4>
 
@@ -145,7 +141,14 @@
 </ul>
 
 
-<h3>Code example</h3>
+<h4>开机启动</h4>
+
+<ul>
+<li>参考/etc/init.d/skeleton 脚本</li>
+</ul>
+
+
+<h3>Code example:</h3>
 
 <figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
 <span class='line-number'>2</span>
@@ -260,6 +263,7 @@
 <span class='line-number'>111</span>
 <span class='line-number'>112</span>
 <span class='line-number'>113</span>
+<span class='line-number'>114</span>
 </pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="kt">bool</span> <span class="n">DaemonInit</span><span class="p">()</span>
 </span><span class='line'> <span class="p">{</span>
 </span><span class='line'>    <span class="cm">/* Our process ID and Session ID */</span>
@@ -275,7 +279,7 @@
 </span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;First fock failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
 </span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
 </span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>    <span class="cm">/* If we got a good PID, then   </span>
+</span><span class='line'>    <span class="cm">/* If we got a good PID, then</span>
 </span><span class='line'><span class="cm">     * we can exit the parent process. */</span>
 </span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
 </span><span class='line'>    <span class="p">{</span>
@@ -333,7 +337,8 @@
 </span><span class='line'>    <span class="n">ssize_t</span> <span class="n">len</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">fd_</span><span class="p">,</span> <span class="n">pidstr</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">pidstr</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
 </span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">len</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
 </span><span class='line'>    <span class="p">{</span>
-</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Write to /var/run/daemon_example.pid failed!&quot; &lt;&lt; std::endl;;</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Write to /var/run/daemon_example.pid failed!&quot;</span>
+</span><span class='line'>                    <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
 </span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
 </span><span class='line'>    <span class="p">}</span>
 </span><span class='line'>
