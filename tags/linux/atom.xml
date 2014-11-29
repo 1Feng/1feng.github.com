@@ -4,7 +4,7 @@
   <title><![CDATA[Category: linux | 1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/tags/linux/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-11-29T16:57:59+08:00</updated>
+  <updated>2014-11-29T17:05:43+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -69,7 +69,7 @@
 
 <h4>屏蔽signals</h4>
 
-<p>－ 屏蔽或者后续自己写代码处理相应signals(nohup 无法完成该任务，它只能)</p>
+<p>－ 屏蔽或者后续自己写代码处理相应signals(nohup 无法完成该任务)</p>
 
 <h4>重定向标准io</h4>
 
