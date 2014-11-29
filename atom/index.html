@@ -4,7 +4,7 @@
   <title><![CDATA[1Feng's Blog]]></title>
   <link href="http://erenno1.github.com/atom.xml" rel="self"/>
   <link href="http://erenno1.github.com/"/>
-  <updated>2014-04-27T19:00:44+08:00</updated>
+  <updated>2014-11-29T16:47:04+08:00</updated>
   <id>http://erenno1.github.com/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -12,6 +12,319 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[如何实现一个daemon]]></title>
+    <link href="http://erenno1.github.com/2014/11/29/daemon-ho-to/"/>
+    <updated>2014-11-29T16:46:00+08:00</updated>
+    <id>http://erenno1.github.com/2014/11/29/daemon-ho-to</id>
+    <content type="html"><![CDATA[<h1>如何实现一个daemon</h1>
+
+<p>@(示例笔记本)[马克飞象|帮助|Markdown]</p>
+
+<p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
+
+<hr />
+
+<h3>Involves：</h3>
+
+<ul>
+<li><strong>后台运行</strong> ：摆脱tty控制</li>
+<li><strong>根目录运行</strong> ：切换工作目录至(/)，防止机器重启公路目录处于Unmount状态，导致进程无法正常工作</li>
+<li><strong>标准io重定向</strong> ：重定向stdin,stdout,stderr</li>
+<li><strong>文件创建模式</strong> ：提高创建文件权限</li>
+<li><strong>屏蔽/接管信号</strong> ： 屏蔽或者接管部分signals处理</li>
+<li><strong>Single instance</strong> ： 可选</li>
+</ul>
+
+
+<blockquote><p>Wikipedia <a href="https://en.wikipedia.org/wiki/Daemon_(computing">Daemon</a></p></blockquote>
+
+<h3>How to</h3>
+
+<h4>修改文件创建模式屏蔽字</h4>
+
+<ul>
+<li>umask(0) : 将文件创建模式屏蔽字设置为0</li>
+</ul>
+
+
+<h4>摆脱tty</h4>
+
+<ul>
+<li>fork 并退出父进程（子进程不是session leader，为setsid创造条件）</li>
+<li>调用setsid，使子进程成为session leader，同时成为一个process group leader，此时已摆脱tty</li>
+<li>再次fork，并退出父进程，摆脱session leader，从而避免进程取得tty控制权限。（如果每次open /dev/tty* 的时候都使用O_NOCTTY, 则该步骤可以取消）</li>
+</ul>
+
+
+<h4>写并锁定pidfile</h4>
+
+<ul>
+<li>锁定pidfile，并将pid写入pidfile，如果pidfile已经存在，说明实例已经启动</li>
+</ul>
+
+
+<h4>切换目录</h4>
+
+<ul>
+<li>cddir(&#8220;/&#8221;)</li>
+</ul>
+
+
+<h4>屏蔽signals</h4>
+
+<p>－ 屏蔽或者后续自己写代码处理相应signals(nohup 无法完成该任务，它只能)</p>
+
+<h4>重定向标准io</h4>
+
+<ul>
+<li>可以选择关闭或者重定向标准io到指定文件</li>
+</ul>
+
+
+<h3>Code example</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="kt">bool</span> <span class="n">DaemonInit</span><span class="p">()</span>
+</span><span class='line'> <span class="p">{</span>
+</span><span class='line'>    <span class="cm">/* Our process ID and Session ID */</span>
+</span><span class='line'>    <span class="n">pid_t</span> <span class="n">pid</span><span class="p">,</span> <span class="n">sid</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Change the file mode mask */</span>
+</span><span class='line'>    <span class="n">umask</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Fork off the parent process */</span>
+</span><span class='line'>    <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;First fock failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/* If we got a good PID, then   </span>
+</span><span class='line'><span class="cm">     * we can exit the parent process. */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_SUCCESS</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Create a new SID for the child process */</span>
+</span><span class='line'>    <span class="n">sid</span> <span class="o">=</span> <span class="n">setsid</span><span class="p">();</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">sid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Setsid failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Fork off the second time */</span>
+</span><span class='line'>    <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Second fork failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/* If we got a good PID, then</span>
+</span><span class='line'><span class="cm">     * we can exit the parent process. */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_SUCCESS</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Ignore signals */</span>
+</span><span class='line'>    <span class="n">signal</span><span class="p">(</span><span class="n">SIGCHLD</span><span class="p">,</span> <span class="n">SIG_IGN</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">signal</span><span class="p">(</span><span class="n">SIGHUP</span><span class="p">,</span> <span class="n">SIG_IGN</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>   <span class="cm">/* Change the current working directory */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">((</span><span class="n">chdir</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">//需保证 pid_fd 生命周期与进程生命周期一致</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">pid_fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="s">&quot;/var/run/daemon_example.pid&quot;</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="o">|</span><span class="n">O_CREAT</span><span class="p">,</span> <span class="mo">0640</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span> <span class="n">pid_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not open &quot; &lt;&lt; pidfile_ &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">lockf</span><span class="p">(</span><span class="n">fd_</span><span class="p">,</span> <span class="n">F_TLOCK</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Another instance is running!&quot; &lt;&lt; std::endl;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/*write and lock pid file*/</span>
+</span><span class='line'>    <span class="n">std</span><span class="o">::</span><span class="n">stringstream</span> <span class="n">stream</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">stream</span> <span class="o">&lt;&lt;</span> <span class="n">getpid</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">pidstr</span> <span class="o">=</span> <span class="n">stream</span><span class="p">.</span><span class="n">str</span><span class="p">();</span>
+</span><span class='line'>    <span class="n">ssize_t</span> <span class="n">len</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">fd_</span><span class="p">,</span> <span class="n">pidstr</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">pidstr</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">len</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Write to /var/run/daemon_example.pid failed!&quot; &lt;&lt; std::endl;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Close out the standard file descriptors */</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not close STDIN_FILENO!&quot; &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not close STDOUT_FILENO!&quot; &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">STDERR_FILENO</span><span class="p">)</span>  <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not close STDERR_FILENO!&quot; &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/*redirect standard output*/</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">output_fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">DEV_NULL</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">output_fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">dup2</span><span class="p">(</span><span class="n">output_fd</span><span class="p">,</span> <span class="n">STDIN_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">dup2</span><span class="p">(</span><span class="n">output_fd</span><span class="p">,</span> <span class="n">STDOUT_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">dup2</span><span class="p">(</span><span class="n">output_fd</span><span class="p">,</span> <span class="n">STDERR_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>参考</h3>
+
+<ol>
+<li><a href="http://www.apuebook.com/">《APUE》 Chapter 13</a></li>
+<li><a href="http://netzmafia.de/skripten/unix/linux-daemon-howto.html">Daemon how to</a></li>
+<li><a href="https://stackoverflow.com/questions/17954432/creting-a-daemon-in-linux">Creating a daemon in Linux</a></li>
+<li><a href="https://stackoverflow.com/questions/958249/whats-the-difference-between-nohup-and-a-daemon">What&#8217;s the difference between nohup and a daemon?</a></li>
+</ol>
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[函数对象与std::bind]]></title>
