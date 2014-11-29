@@ -7,9 +7,9 @@
 	<meta name="author" content="Travis Swicegood">
 
 	
-	<meta name="description" content="Linux下经常需要将服务程序实现为daemon（守护进程）。从而完成后台运行，开机启动，关机正常结束的功能。 Involves： 后台运行 ：摆脱tty控制
-根目录运行 ：切换工作目录至(/)，防止机器重启公路目录处于Unmount状态，导致进程无法正常工作
-标准io重定向 ：重定向stdin, &hellip;">
+	<meta name="description" content="Linux下经常需要将服务程序实现为daemon（守护进程）。从而完成后台运行，开机启动，关机正常结束的功能。 需求： 后台运行 ：摆脱tty控制
+根目录运行 ：切换工作目录至(/)，防止机器重启工作目录处于Unmount状态，导致进程无法正常工作
+标准io重定向 ：重定向stdin,stdout &hellip;">
 	
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
@@ -85,11 +85,11 @@
 
 <hr />
 
-<h3>Involves：</h3>
+<h3>需求：</h3>
 
 <ul>
 <li><strong>后台运行</strong> ：摆脱tty控制</li>
-<li><strong>根目录运行</strong> ：切换工作目录至(/)，防止机器重启公路目录处于Unmount状态，导致进程无法正常工作</li>
+<li><strong>根目录运行</strong> ：切换工作目录至(/)，防止机器重启工作目录处于Unmount状态，导致进程无法正常工作</li>
 <li><strong>标准io重定向</strong> ：重定向stdin,stdout,stderr</li>
 <li><strong>文件创建模式</strong> ：提高创建文件权限</li>
 <li><strong>屏蔽/接管信号</strong> ： 屏蔽或者接管部分signals处理</li>
