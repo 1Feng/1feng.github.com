@@ -264,6 +264,7 @@
 <span class='line-number'>112</span>
 <span class='line-number'>113</span>
 <span class='line-number'>114</span>
+<span class='line-number'>115</span>
 </pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="kt">bool</span> <span class="n">DaemonInit</span><span class="p">()</span>
 </span><span class='line'> <span class="p">{</span>
 </span><span class='line'>    <span class="cm">/* Our process ID and Session ID */</span>
@@ -359,6 +360,7 @@
 </span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
 </span><span class='line'>    <span class="p">}</span>
 </span><span class='line'>    <span class="cm">/*redirect standard output*/</span>
+</span><span class='line'>    <span class="c1">//需保证 output_fd 生命周期与进程生命周期一致</span>
 </span><span class='line'>    <span class="kt">int</span> <span class="n">output_fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">DEV_NULL</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
 </span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">output_fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 </span><span class='line'>    <span class="p">{</span>
