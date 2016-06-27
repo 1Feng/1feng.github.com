@@ -119,7 +119,7 @@ print('0xFFF0FFFFFFFFFF00 in hex : ', bit.tostring(0xFFF0FFFFFFFFFF00, 16))
 0xFFF0FFFFFFFFFF00 in hex : 	fff1000000000000               -- ？？
 
 ```
-很明显是发生了溢出，但是却没有明显规律，毕竟2^63没有溢出，但是为什么比他小的却溢出了。
+很明显是发生了溢出，但是却没有明显规律，毕竟2^63 没有溢出，但是为什么比他小的却溢出了。
 
 之前啃[CSAPP](https://book.douban.com/subject/1230413/)时看到过浮点数的binary形式（[IEEE 754](https://en.wikipedia.org/wiki/IEEE_floating_point)）和整型是完全不一样的，猜测肯定是lua中int64--->double有溢出/精度丢失，具体什么情况下会触发必须搞清楚，不然这套编码方案就成了纸上谈兵了。
 
