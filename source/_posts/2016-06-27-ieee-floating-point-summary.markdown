@@ -127,6 +127,7 @@ print('0xFFF0FFFFFFFFFF00 in hex : ', bit.tostring(0xFFF0FFFFFFFFFF00, 16))
 回去翻[CSAPP](https://book.douban.com/subject/1230413/)，结合网上一些讲解，简单总结下IEEE 754里面的一些关键点
 
 根据[IEEE 754](https://en.wikipedia.org/wiki/IEEE_floating_point)的规定，浮点数二进制计算公式为：V = (-1)^S * M * 2^E
+
 二进制格式表示如下：
 
 ![](/images/blog_images/float.png)

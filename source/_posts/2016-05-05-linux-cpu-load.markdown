@@ -9,7 +9,7 @@ categories:
 ---
 
 ####简析
-工作一直是在linux环境下，经常通过top，uptime来查看当前机器的负载（load average）, 但是始终对这个概念比较模糊，无法描述清楚这个值所反馈的真实含义，抽时间读了网上的一些文章，简单坐下笔记：
+工作一直是在linux环境下，经常通过top，uptime来查看当前机器的负载（load average）, 但是始终对这个概念比较模糊，无法描述清楚这个值所反馈的真实含义，抽时间读了网上的一些文章，简单做下笔记：
  
 - **introduction** ：例如 load average: 0.03, 0.05, 0.06 后面三个数字代表了过去1分钟，5分钟，15分钟的CPU平均负载；
 - **Threshold** ：如果当前机器是一个N核CPU（grep 'model name' /proc/cpuinfo | wc -l），则load average的上限就是N，具体如下：
@@ -236,6 +236,3 @@ static int loadavg_proc_show(struct seq_file *m, void *v)
 5. [Understanding linux cpu load - when should you be worried?](http://blog.scoutapp.com/articles/2009/07/31/understanding-load-averages)
 6. [UNIX Load Average Part 1: How It Works](http://www.teamquest.com/files/9214/2049/9761/ldavg1.pdf)
 7. [UNIX Load Average Part 2: Not Your Average Average](http://www.teamquest.com/files/6714/2049/9760/ldavg2.pdf)
-
-
-
