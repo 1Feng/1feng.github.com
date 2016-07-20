@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "signal with mutex locked or not"
+title: "signal with mutex locked or not(译)"
 date: 2016-07-20 16:48
 comments: true
 categories: 
@@ -109,31 +109,42 @@ However, condition variables may be subject to unbounded priority inversion in t
 然而，条件变量可能被不做限制的优先级倒置以三种方式影响。第一种明显的倒置是条件变量关联的mutex，因为mutex自身就会被不做限制的优先级倒置所影响。
 
 Another priority inversion can occur before the thread signal or broadcast the condition variable. Consider again the settings shown in figure 1, where T1 is a low priority P1 thread, and T2 a high priority P2 thread ( P1 < P2 ). As long as T1 doesn’t signal or broadcast, it can be preempted by a mid priority thread T3 with priority P3 where P1 < P3 < P2. In particular, T1 could be preempted between the unlock and the signal/broadcast operation, if it choses to unlock first. Eventually T1 cannot wake-up T2, and so the mid priority thread T3 prevents the high priority thread T2 to run. If we signal or broadcast first, we’re guaranteed that the thread T2 shall be scheduled as soon as T1 unlocked the mutex, assuming that or priority ceiling or inheritance protocol is used for the mutex. So it is slightly better to signal or broadcast while holding the mutex. Note however that in both cases, a priority inversion could occur while T1 is changing the predicate.
-另外一种优先级倒置可以发生在线程signal/broadcast条件变量之前，再考虑figure 1中的情节，假设T1是一个低优先级（P1）的线程，T2是一个高优先级（P2）的线程（P1 < P2）。只要T1不signal/broadcast，他就就可以被中间优先级（P3）的线程T3抢占（P1 < P3 < P2）（`译者注：注意和前一种做区分，这个抢占是cpu正常调度引起的，比较P3 > P1`）。通常情况，如果选择先解锁再signal/broadcast, T1可以在解锁之后和signal/broadcast之前被抢占。最终T1不会唤醒T2，因此T3阻止了比它优先级更高的T2运行。如果我们先signal/broadcast，再解锁，我们可以保证T1解锁之后T2可以尽快被调度到，这样做或者在mutex上使用优先级顶置或继承协议。所以持有mutex时进行signal/broadcast稍微优于先unlock再singnal/broadcast。然而在在这两种案例中（`哪两种？是指前两种不做限制的优先级倒置的影响方式？还是解锁前解锁后signal/boadcast？`），当T1正在修改谓词的时候优先级倒置都会发生
+另外一种优先级倒置可以发生在线程signal/broadcast条件变量之前，再考虑figure 1中的情节，假设T1是一个低优先级（P1）的线程，T2是一个高优先级（P2）的线程（P1 < P2）。只要T1不signal/broadcast，他就就可以被中间优先级（P3）的线程T3抢占（P1 < P3 < P2）（`译者注：注意和前一种做区分，这个抢占是cpu正常调度引起的，毕竟P3 > P1`）。通常情况，如果选择先解锁再signal/broadcast, T1可以在解锁之后和signal/broadcast之前被抢占。最终T1不会唤醒T2，因此T3阻止了比它优先级更高的T2运行。如果先signal/broadcast，再解锁，我们可以保证T1解锁之后T2可以尽快被调度到，或者在mutex上使用优先级顶置或继承协议可以达到同样的效果。所以持有mutex时进行signal/broadcast稍微优于先unlock再singnal/broadcast(`其实我们想要的结果是不管是否先解锁，只要保证在T1进行signal/boadcast之后，T3可以尽快得到cpu时间片`)。值得注意的是不管怎样在这两种情形(`译注：即是否先解锁再signal/boadcast这两`)中，当T1正在修改谓词的时候优先级倒置都会发生（`译注：这种调度是正常的，毕竟P3>P1`）.
 
 A related situation is when the thread T3 is blocked on the mutex. We discussed already this situation for time sharing scheduling in the previous section. If T1 unlocks before the waking up T2, T3 will acquire the CPU. In the intercepted wake-up case, the change of condition is processed by T3 at a lower priority than it would have been by T2. In the other case, we get again a potential unbounded priority inversion. 
 
+一个相关的情形是，当T3阻塞在mutex上。我么已经在之前分时调度的章节讨论过了。如果T1在唤醒T2之前解锁，T3将会获得CPU时间片。在拦截唤醒的例子中，条件被修改后本应该T2处理的却被优先级更低的T3给处理了。另一个例子中(`哪个啊？？`)，我们再次被潜在的不受限制的优先级倒置影响。
+
 In the light of the previous explanations, we may believe that unlocking the mutex after the signal or broadcast operation is mandatory for real-time predictability. This judgment needs to be moderated. I never experienced myself situations where this scheme is obligatory to enforce predictability. It was always possible to change the design, so that unlocking first wasn’t a problem. In fact, David Butenhof wrote in a recent post that the real-time predictability statement in the standard is essentially political rather than technical[4]. It has been raised by members of the real-time working group, and was settle down in the standard to avoid potential objections during the balloting process.
+根据之前的解释，我们相信在要想实时调度的结果可预测，signal/broadcast之后解锁mutex是必须的。这种判断应该有所节制，我从来没有经历过必须强制执行可预测性的情形。总是有可能去修改设计，所以先解锁未尝不可。事实上，David Butenhof 在最近的文章中写道，在SUS标准中的实时可预测陈述本质上是政治而不是技术。这已经被实时工作组的成员追捧起来，并且为了避免投票过程中潜在的反对也被SUS标准采纳。
 
 A Trap
+####一个陷阱
 
 There is however one case where you can get into troubles when you unlock first. You must make sure that the condition variable you signal or broadcast still refers to a valid condition variable object after you unlocked the mutex. This sounds pretty obvious, but recognizing this fact in practice isn’t always easy[5]. In particular, the alarm bells should be set off if you are destroying the condition variable (or the memory holding the condition variable) in the woken thread(s).
+存在一个案例，如果你先unlock会令你陷入问题中。你必须确保当你解锁mutex之后你所signal/broadcast的条件变量依旧引用的是一个有效的条件变量。这听起来似乎是显而易见的，但是在实践中一直确保这一点并不轻松`[5]`. 特别的，如果正在被唤醒的线程中销毁条件变量（亦或者条件变量所在的内存）则需要拉响警报了。
+
 
 Download cv_02.c
 
 On my box, the above program terminates with a SIGSEGV after a few thousands of iterations when running at least on two CPUs. The problem lies at lines 56-59. It can happen that the shutdown thread sees that nthreads==0, and thus destroys the condition variable, But shortly after a thread in the pool tries to signal the condition variable that doesn’t exist anymore. If we signal first and then unlock, the program runs fine.
+上述程序运行在至少双核的机器上，在反复几千次后被SIGSEGV信号所终止。问题在56-59行。问题发生在在负责停止的线程发现nthread为0时会销毁条件变量，但是稍后在线程池中的线程会尝试signal已经不存在的条件变量。如果我们先signal然后再解锁，程序运行就不会有问题。
+
 
 Conclusion
+####结论
 
 I personally prefer to signal or broadcast while holding the mutex. First, I may avoid some obscure bugs. Second, doing so has almost no performance impact on Pthreads implementation that use wait morphing optimization. Third, and more importantly, I consider moving the unlock before the signal/broadcast if and only if profiling exhibits substantial performance boost. There is no point in optimizing something that doesn’t contribute to my bottlenecks.
 
+我个人选择在持有mutex的情况下进行signal/boadcast.首先，我可以避免一些晦涩的bug。其次，这样做在使用wait morphing优化实现的pthread中几乎没有性能影响。再者，更重要的一点，我认为当且仅当经过分析有明显的性能提升时才会将解锁放在signal/boadcast之前。对瓶颈没有贡献的优化是没有意义的。
+
 Notes and further Readings
 
-- [1] David R. Butenhof: Programming with POSIX Threads, section 3.3.3, pp 82-83, Addison-Wesley, ISBN-13 978-0-201-63392-4.
-- [2] Ulrich Drepper. Futexes Are Tricky. A paper about futex, the Linux kernel object behind condition variable. See in particular the Chapter 8 “Optimizing Wakeup” on page 9-10.
-- [3] Kyle & Bill Renwick. How to use priority inheritance. An excellent article from embedded.com about priority inversion and possible cures.
-- [4] basic question about concurrency. A discussion thread on c.p.t, where David Butenhof explains what the “predictable scheduling” statement in the SUS standard means and where it comes from.
-- [5] A word of caution when juggling pthread_cond_signal/pthread_mutex_unlock . A post from Bryan Ischo on c.p.t. that shows a subtle bug when unlocking before signaling.
+- `[1]` David R. Butenhof: Programming with POSIX Threads, section 3.3.3, pp 82-83, Addison-Wesley, ISBN-13 978-0-201-63392-4.]
+- `[2]` [Ulrich Drepper. Futexes Are Tricky](https://www.akkadia.org/drepper/futex.pdf). A paper about futex, the Linux kernel object behind condition variable. See in particular the Chapter 8 “Optimizing Wakeup” on page 9-10.
+- `[3]` [Kyle & Bill Renwick. How to use priority inheritance](http://www.cs.rice.edu/~mgricken/teaching/402/09-spring/readings/PriorityInversion.html). An excellent article from embedded.com about priority inversion and possible cures.
+- `[4]` [basic question about concurrency](https://groups.google.com/forum/#!topic/comp.programming.threads/wEUgPq541v8). A discussion thread on c.p.t, where David Butenhof explains what the “predictable scheduling” statement in the SUS standard means and where it comes from.
+- `[5]` [A word of caution when juggling pthread_cond_signal/pthread_mutex_unlock](http://groups.google.de/group/comp.programming.threads/browse_thread/thread/23dd5883dc36d14a/7e5fcdf360543375) . A post from Bryan Ischo on c.p.t. that shows a subtle bug when unlocking before signaling.
 
 Like
 
