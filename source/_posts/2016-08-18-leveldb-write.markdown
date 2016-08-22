@@ -5,7 +5,7 @@ date: 2016-08-18 15:03
 comments: true
 categories:
     - distribute
-    - system
+    - leveldb
 ---
 ####插入一条K/V记录
 ![](/images/blog_images/leveldb/writer.png)
