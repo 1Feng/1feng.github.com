@@ -12,7 +12,7 @@ categories:
 k/v级别的MVCC是通过sequence number来实现的：
 
 #### Sequence Number
-- sequence number 是一个由VersionSet直接持有的全局的编号，每插入一条记录，就会递增
+- sequence number 是一个由VersionSet直接持有的全局的编号，每次写入（`注意批量写入时sequence number是相同的`），就会递增
 
 
 - 根据我们之前对写入操作的分析，我们可以看到，当插入一条key的时候，实际参与排序，存储的是key和sequence number以及type组成的
