@@ -139,6 +139,9 @@ struct FileMetaData {
 void Apply(VersionEdit* edit) {
   ...
   for (size_t i = 0; i < edit->new_files_.size(); i++) {
+    const int level = edit->new_files_[i].first;
+    FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
+    f->refs = 1;
     // We arrange to automatically compact this file after
     // a certain number of seeks.  Let's assume:
     //   (1) One seek costs 10ms
