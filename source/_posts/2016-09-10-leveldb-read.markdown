@@ -21,8 +21,9 @@ categories:
 代码里其实有一个类，叫做Lookupkey，其内部的完整数据即memtable_key，同时可以方便的利用成员函数截取memtable_key,internal_key,user_key方便各种场景
 
 LookupKey的其实是由 key， sequence number组成的，如之前文章提到:
-  - 如果普通Get()操作，sequence number 为 last sequence number
-  - 如果是使用的snapshot, sequence number 为 snapshot sequence number
+
+- 如果普通Get()操作，sequence number 为 last sequence number
+- 如果是使用的snapshot, sequence number 为 snapshot sequence number
 
 ``` cpp
 // dbformat.h
