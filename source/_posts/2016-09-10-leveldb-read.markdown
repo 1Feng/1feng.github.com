@@ -18,9 +18,11 @@ categories:
 
 >**key**: 用户提供的key，我们称之为user_key
 
-代码里其实有一个类，叫做Lookupkey，其内部的完整数据即memtable_key，同时可以方便的利用成员函数截取memtable_key,internal_key,user_key方便各种场景
+当用户去查询某个key时，leveldb会先利用key构建起Lookupkey类
 
-LookupKey的其实是由 key， sequence number组成的，如之前文章提到:
+Lookupkey类内部的完整数据即memtable_key，可以方便的利用成员函数截取memtable_key,internal_key,user_key以方便去memtalble和sstable中查询
+
+事实上LookupKey是由 key， sequence number组成的，如之前文章提到:
 
 - 如果普通Get()操作，sequence number 为 last sequence number
 - 如果是使用的snapshot, sequence number 为 snapshot sequence number
