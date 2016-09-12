@@ -4,7 +4,7 @@
   <title><![CDATA[Category: system | 1Feng's Blog]]></title>
   <link href="http://1feng.github.io/tags/system/atom.xml" rel="self"/>
   <link href="http://1feng.github.io/"/>
-  <updated>2016-09-11T00:07:10+08:00</updated>
+  <updated>2016-09-12T21:45:35+08:00</updated>
   <id>http://1feng.github.io/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -14,7 +14,7 @@
 
   
   <entry>
-    <title type="html"><![CDATA[leveldb源码笔记之Read]]></title>
+    <title type="html"><![CDATA[leveldb源码笔记之读操作]]></title>
     <link href="http://1feng.github.io/2016/09/10/leveldb-read/"/>
     <updated>2016-09-10T22:07:00+08:00</updated>
     <id>http://1feng.github.io/2016/09/10/leveldb-read</id>
@@ -107,7 +107,7 @@ char buf[sizeof(file_number)];
 EncodeFixed64(buf, file_number);
 Slice key(buf, sizeof(buf));
 </code></li>
-<li>value: TableCache， 其实主要是sstable index block里的数据
+<li>value: TableAndFile， 其实主要是sstable index block里的数据
 ```cpp
 // table_cache.cc
 struct TableAndFile {
@@ -194,9 +194,36 @@ Iterator<em> NewIterator(const Comparator</em> comparator);</p></li>
     <link href="http://1feng.github.io/2016/08/24/mvcc-and-manifest/"/>
     <updated>2016-08-24T15:51:00+08:00</updated>
     <id>http://1feng.github.io/2016/08/24/mvcc-and-manifest</id>
-    <content type="html"><![CDATA[<h3>Key/Value</h3>
+    <content type="html"><![CDATA[<h3>MVCC</h3>
 
-<p>k/v级别的MVCC是通过sequence number来实现的：</p>
+<p><strong>问题</strong>:
+针对同一条记录，如果读和写在同一时间发生时，reader可能会读取到不一致或者写了一半的数据</p>
+
+<p><strong>常见解决方案</strong></p>
+
+<blockquote><p>悲观锁：</p>
+
+<blockquote><p>最简单的方式,即通过锁来控制并发，但是效率非常的低,增加的产生死锁的机会</p></blockquote>
+
+<p>乐观锁：</p>
+
+<blockquote><p>它假设多用户并发的事物在处理时不会彼此互相影响，各食物能够在不产生锁的的情况下处理各自影响的那部分数据。在提交数据更新之前，每个事务会先检查在该事务读取数据后，有没有其他事务又修改了该数据。如果其他事务有更新的话，正在提交的事务会进行回滚;这样做不会有锁竞争更不会产生思索，但如果数据竞争的概率较高，效率也会受影响</p></blockquote>
+
+<p>MVCC -- Multiversion concurrency control:</p>
+
+<blockquote><p>每一个执行操作的用户，看到的都是数据库特定时刻的的快照(snapshot), writer的任何未完成的修改都不会被其他的用户所看到;当对数据进行更新的时候并是不直接覆盖，而是先进行标记, 然后在其他地方添加新的数据，从而形成一个新版本, 此时再来读取的reader看到的就是最新的版本了。所以这种处理策略是维护了多个版本的数据的,但只有一个是最新的。</p></blockquote></blockquote>
+
+<h3>Key/Value</h3>
+
+<p>如<a href="http://1feng.github.io/2016/08/18/leveldb-write/">前文</a>所述，leveldb中写入一条记录，仅仅是先写入binlog，然后写入memtable</p>
+
+<ul>
+<li><p><strong>binlog</strong>: binlog的写入只需要append，无需并发控制</p></li>
+<li><p><strong>memtable</strong>: memtable是使用Memory Barriers技术实现的无锁的skiplist</p></li>
+<li><p><strong>更新</strong>: 真正写入memtable中参与skiplist排序的key其实是包含sequence number的，所以更新操作其实只是写入了一条新的k/v记录, 真正的更新由compact完成</p></li>
+<li><p><strong>删除</strong>: 如<a href="http://1feng.github.io/2016/08/18/leveldb-write/">前文</a>提到，删除一条Key时，仅仅是将type标记为kTypeDeletion，写入(同上述写入逻辑)了一条新的记录，并没有真正删除,真正的删除也是由compact完成的</p></li>
+</ul>
+
 
 <h4>Sequence Number</h4>
 
@@ -256,11 +283,17 @@ InternalKey</p></li>
 
 <p>sstable级别的MVCC是利用Version和VersionEdit实现的：</p>
 
+<ul>
+<li>只有一个current version，持有了最新的sstable集合</li>
+<li>VersionEdit代表了一次current version的更新, 新增了那些sstable，哪些sstable已经没用了等</li>
+</ul>
+
+
 <p><img src="/images/blog_images/leveldb/mvcc.png" alt="" /></p>
 
 <h3>Mainifest</h3>
 
-<p>VersionEdit代表了一次状态转移，每次状态转移都写入mainifest文件，以便重启时recover</p>
+<p>每次current version 更新的数据(即新产生的VersionEdit)都写入mainifest文件，以便重启时recover</p>
 
 <p><img src="/images/blog_images/leveldb/write_a_manifest.png" alt="" /></p>
 ]]></content>

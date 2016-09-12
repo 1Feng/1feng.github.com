@@ -3,7 +3,7 @@
 <html>
 <head>
 	<meta charset="utf-8">
-	<title>leveldb源码笔记之Read - 1Feng's Blog</title>
+	<title>leveldb源码笔记之读操作 - 1Feng's Blog</title>
 	<meta name="author" content="Travis Swicegood">
 
 	
@@ -78,7 +78,7 @@
 
 	
 	<div id="content" class="inner"><article class="post">
-	<h2 class="title">leveldb源码笔记之Read</h2>
+	<h2 class="title">Leveldb源码笔记之读操作</h2>
 	<div class="entry-content"><h3>key逻辑分类</h3>
 
 <p>根据我们之前文章的描述，leveldb是数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储会略微有差异</p>
@@ -218,7 +218,7 @@
 
 
 <ul>
-<li>value: TableCache， 其实主要是sstable index block里的数据</li>
+<li>value: TableAndFile， 其实主要是sstable index block里的数据</li>
 </ul>
 
 
