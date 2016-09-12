@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[Category: cpp | 1Feng's Blog]]></title>
-  <link href="http://erenno1.github.com/tags/cpp/atom.xml" rel="self"/>
-  <link href="http://erenno1.github.com/"/>
-  <updated>2014-11-29T23:52:17+08:00</updated>
-  <id>http://erenno1.github.com/</id>
+  <link href="http://1feng.github.io/tags/cpp/atom.xml" rel="self"/>
+  <link href="http://1feng.github.io/"/>
+  <updated>2016-09-11T00:07:10+08:00</updated>
+  <id>http://1feng.github.io/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
     <email><![CDATA[codingforfan@gmail.com]]></email>
@@ -15,9 +15,9 @@
   
   <entry>
     <title type="html"><![CDATA[函数对象与std::bind]]></title>
-    <link href="http://erenno1.github.com/2014/04/27/std-bind-in-c-plus-plus/"/>
+    <link href="http://1feng.github.io/2014/04/27/std-bind-in-c-plus-plus/"/>
     <updated>2014-04-27T14:51:00+08:00</updated>
-    <id>http://erenno1.github.com/2014/04/27/std-bind-in-c-plus-plus</id>
+    <id>http://1feng.github.io/2014/04/27/std-bind-in-c-plus-plus</id>
     <content type="html"><![CDATA[<hr />
 
 <h3>函数指针</h3>

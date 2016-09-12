@@ -1,0 +1,559 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: leveldb | 1Feng's Blog]]></title>
+  <link href="http://1feng.github.io/tags/leveldb/atom.xml" rel="self"/>
+  <link href="http://1feng.github.io/"/>
+  <updated>2016-09-11T00:07:10+08:00</updated>
+  <id>http://1feng.github.io/</id>
+  <author>
+    <name><![CDATA[Travis Swicegood]]></name>
+    <email><![CDATA[codingforfan@gmail.com]]></email>
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[leveldb源码笔记之Read]]></title>
+    <link href="http://1feng.github.io/2016/09/10/leveldb-read/"/>
+    <updated>2016-09-10T22:07:00+08:00</updated>
+    <id>http://1feng.github.io/2016/09/10/leveldb-read</id>
+    <content type="html"><![CDATA[<h3>key逻辑分类</h3>
+
+<p>根据我们之前文章的描述，leveldb是数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储会略微有差异</p>
+
+<blockquote><p><strong>memtable</strong>: 逻辑上称为memtable_key</p>
+
+<p><strong>sstalbe</strong>: 逻辑上称为internal_key</p>
+
+<p><strong>key</strong>: 用户提供的key，我们称之为user_key</p></blockquote>
+
+<p>当用户去查询某个key时，leveldb会先利用key构建起Lookupkey类</p>
+
+<p>Lookupkey类内部的完整数据即memtable_key，可以方便的利用成员函数截取memtable_key,internal_key,user_key以方便去memtalble和sstable中查询</p>
+
+<p>事实上LookupKey是由 key， sequence number组成的，如之前文章提到:</p>
+
+<ul>
+<li>如果普通Get()操作，sequence number 为 last sequence number</li>
+<li>如果是使用的snapshot, sequence number 为 snapshot sequence number</li>
+</ul>
+
+
+<p>``` cpp
+// dbformat.h
+// lookup key format:
+// start<em>       kstart</em>                                         end_
+//   |             |                                             |
+//   |             |<--user_key-->|                              |
+//   |             |<---------------internal_key---------------->|
+//   |<---------------------memtable_key------------------------>|
+//   -------------------------------------------------------------
+//   |  1--5 byte  | klenght byte |           8 byte             |
+//   -------------------------------------------------------------
+//   | klenght + 8 |   raw key    | pack(sequence number, type)) |
+//   -------------------------------------------------------------
+// A helper class useful for DBImpl::Get()
+class LookupKey {
+ public:
+  // Initialize *this for looking up user_key at a snapshot with
+  // the specified sequence number.
+  LookupKey(const Slice&amp; user_key, SequenceNumber sequence);</p>
+
+<p>  ~LookupKey();</p>
+
+<p>  // Return a key suitable for lookup in a MemTable.
+  Slice memtable_key() const { return Slice(start<em>, end</em> - start_); }</p>
+
+<p>  // Return an internal key (suitable for passing to an internal iterator)
+  Slice internal_key() const { return Slice(kstart<em>, end</em> - kstart_); }</p>
+
+<p>  // Return the user key
+  Slice user_key() const { return Slice(kstart<em>, end</em> - kstart_ - 8); }</p>
+
+<p> private:
+  const char<em> start_;
+  const char</em> kstart<em>;
+  const char* end</em>;
+  char space_[200];      // Avoid allocation for short keys</p>
+
+<p>  // No copying allowed
+  LookupKey(const LookupKey&amp;);
+  void operator=(const LookupKey&amp;);
+};
+```
+如图:
+<img src="/images/blog_images/leveldb/leveldb-keys.png" alt="" /></p>
+
+<h3>读操作</h3>
+
+<p>图示Get()操作的基本逻辑如下：
+<img src="/images/blog_images/leveldb/leveldb-read.png" alt="" />
+以上我们是假设sstable没有filter的情况下的操作逻辑</p>
+
+<h3>cache</h3>
+
+<p>无论是table cache，还是block cache，都是使用了相同的数据结构LRUCache来实现的，区别只在于内部存储的数据不同。</p>
+
+<p>LRUCache是通过k/v方式存储的，对于：</p>
+
+<p><strong>TableCache</strong>:</p>
+
+<ul>
+<li>key: 其实就是file number
+<code>cpp
+// table_cache.cc
+char buf[sizeof(file_number)];
+EncodeFixed64(buf, file_number);
+Slice key(buf, sizeof(buf));
+</code></li>
+<li>value: TableCache， 其实主要是sstable index block里的数据
+```cpp
+// table_cache.cc
+struct TableAndFile {
+RandomAccessFile<em> file;
+Table</em> table;
+};</li>
+</ul>
+
+
+<p>// table.cc
+// Table里的主要数据即下述
+struct Table::Rep {</p>
+
+<pre><code>~Rep() {
+  delete filter;
+  delete [] filter_data;
+  delete index_block;
+}
+
+Options options;
+Status status;
+RandomAccessFile* file;
+uint64_t cache_id;
+FilterBlockReader* filter;
+const char* filter_data;
+
+BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
+Block* index_block;
+</code></pre>
+
+<p>};
+```
+<strong>BlockCache</strong>:</p>
+
+<ul>
+<li>key: 其实是 cache_id 和 block 在sstable中的offset的组合
+<code>cpp
+// table.cc
+char cache_key_buffer[16];
+// 构造block_cache 的key
+EncodeFixed64(cache_key_buffer, table-&gt;rep_-&gt;cache_id);
+EncodeFixed64(cache_key_buffer+8, handle.offset());
+Slice key(cache_key_buffer, sizeof(cache_key_buffer));
+</code></li>
+<li><p>value: data block 内容
+```cpp
+// block.h
+class Block {
+public:
+// Initialize the block with the specified contents.
+explicit Block(const BlockContents&amp; contents);</p>
+
+<p>~Block();</p>
+
+<p>size_t size() const { return size_; }
+Iterator<em> NewIterator(const Comparator</em> comparator);</p></li>
+</ul>
+
+
+<p> private:
+  uint32_t NumRestarts() const;</p>
+
+<p>  const char* data<em>;
+  size_t size</em>;
+  uint32_t restart_offset<em>;     // Offset in data</em> of restart array
+  bool owned<em>;                  // Block owns data</em>[]</p>
+
+<p>  // No copying allowed
+  Block(const Block&amp;);
+  void operator=(const Block&amp;);</p>
+
+<p>  class Iter;
+};
+```</p>
+
+<h4>cache 逻辑结构图示</h4>
+
+<p><img src="/images/blog_images/leveldb/leveldb-cache.png" alt="" /></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[leveldb源码笔记之Compact]]></title>
+    <link href="http://1feng.github.io/2016/09/06/leveldb-compact/"/>
+    <updated>2016-09-06T14:55:00+08:00</updated>
+    <id>http://1feng.github.io/2016/09/06/leveldb-compact</id>
+    <content type="html"><![CDATA[<h3>简介</h3>
+
+<p>leveldb中只有minor compaction 和 major compaction两种</p>
+
+<ul>
+<li><p>代码中通过调用<code>DBImpl::MaybeScheduleCompaction()</code>来触发两种compaction
+```cpp
+// db_impl.cc
+void DBImpl::MaybeScheduleCompaction() {
+mutex<em>.AssertHeld();
+// 确保只有一个后台线程在做compact
+if (bg_compaction_scheduled</em>) {
+  // Already scheduled
+} else if (shutting_down<em>.Acquire_Load()) {
+  // DB is being deleted; no more background compactions
+} else if (!bg_error</em>.ok()) {
+  // Already got an error; no more changes
+} else if (imm_ == NULL &amp;&amp;</p>
+
+<pre><code>       manual_compaction_ == NULL &amp;&amp;
+       !versions_-&gt;NeedsCompaction()) {
+</code></pre>
+
+<p>  // No work to be done
+} else {
+  bg_compaction_scheduled<em> = true;
+  // 启动compact线程,主要逻辑是通过DBImpl::BackgroundCompaction()实现
+  env</em>->Schedule(&amp;DBImpl::BGWork, this);
+}
+}
+```
+调用时机:</p></li>
+<li><p>1.每次写入前，需要确保空间充足，如果空间不足，尝试将memtable转换为immutable-memtable，之后调用<code>DBImpl::MaybeScheduleCompaction()</code></p></li>
+<li>2.每次重启db，binlog recover结束后，会触发调用<code>DBImpl::MaybeScheduleCompaction()</code></li>
+<li>3.每次读取一条记录结束时会触发调用<code>DBImpl::MaybeScheduleCompaction()</code></li>
+</ul>
+
+
+<h3>minor compaction:</h3>
+
+<h4>方式：</h4>
+
+<ul>
+<li>将immutalbe-memtable dump到磁盘，形成sstable</li>
+<li>sstable一般位于level-0,如果sstable的key范围和当前level没有重叠会尝试下移，最多不会超过<code>config::kMaxMemCompactLevel(默认为2)</code></li>
+</ul>
+
+
+<h4>触发时机:</h4>
+
+<ul>
+<li>每次调用BackGroudCompaction如果存在immutalbe-memtable都会触发将其dump到磁盘</li>
+</ul>
+
+
+<h3>major compaction</h3>
+
+<h4>方式：</h4>
+
+<ul>
+<li>将level-n的sstable 与 level-(n+1)中与之存在key范围重叠的sstable多路归并，生成level-(n+1)的sstable</li>
+<li>如果是level-0,则由于level-0中sstable之间key有重叠，所以level-0参与compact的sstable可能不止一个</li>
+</ul>
+
+
+<h4>触发时机:</h4>
+
+<p>第一种是size触发类型(优先)：</p>
+
+<p>```cpp
+// version_set.cc
+void VersionSet::Finalize(Version* v) {
+  // Precomputed best level for next compaction
+  int best_level = -1;
+  double best_score = -1;</p>
+
+<p>  for (int level = 0; level &lt; config::kNumLevels-1; level++) {</p>
+
+<pre><code>double score;
+if (level == 0) {
+  // We treat level-0 specially by bounding the number of files
+  // instead of number of bytes for two reasons:
+  //
+  // 对于较大的write buffer, 不过多的进行levle-0的compactions是好的
+  // (1) With larger write-buffer sizes, it is nice not to do too
+  // many level-0 compactions.
+  //
+  // 因为每次读操作都会触发level-0的归并，因此当个别的文件size很小的时候
+  // 我们期望避免level-0有太多文件存在
+  // (2) The files in level-0 are merged on every read and
+  // therefore we wish to avoid too many files when the individual
+  // file size is small (perhaps because of a small write-buffer
+  // setting, or very high compression ratios, or lots of
+  // overwrites/deletions).
+  score = v-&gt;files_[level].size() /
+      static_cast&lt;double&gt;(config::kL0_CompactionTrigger);
+} else {
+  // Compute the ratio of current size to size limit.
+  const uint64_t level_bytes = TotalFileSize(v-&gt;files_[level]);
+  score = static_cast&lt;double&gt;(level_bytes) / MaxBytesForLevel(level);
+}
+
+if (score &gt; best_score) {
+  best_level = level;
+  best_score = score;
+}
+</code></pre>
+
+<p>  }</p>
+
+<p>  v->compaction_level<em> = best_level;
+  v->compaction_score</em> = best_score;
+}
+```</p>
+
+<ul>
+<li><p>对于level-0:</p>
+
+<ul>
+<li>score = level-0文件数/config::kL0_CompactionTrigger(默认为4)</li>
+</ul>
+</li>
+<li><p>对于level-n(n>0)：</p>
+
+<ul>
+<li>score = 当前level的字节数 / (10<sup>n</sup> * 2<sup>20)</sup>  2<sup>20</sup> 即1MB</li>
+</ul>
+</li>
+<li><p>score >= 1,当前level就会被标识起来，等待触发 compaction</p></li>
+</ul>
+
+
+<p>第二种是seek触发:</p>
+
+<p>```cpp
+// version_edit.h</p>
+
+<p>// 记录了文件编号， 文件大小，最小key，最大key
+// sstable文件的命名就是按照file number + 特定后缀完成的
+struct FileMetaData {
+  int refs;
+  int allowed_seeks;          // Seeks allowed until compaction
+  uint64_t number;
+  uint64_t file_size;         // File size in bytes
+  InternalKey smallest;       // Smallest internal key served by table
+  InternalKey largest;        // Largest internal key served by table</p>
+
+<p>  FileMetaData() : refs(0), allowed_seeks(1 &lt;&lt; 30), file_size(0) { }
+};</p>
+
+<p>// version_set.cc</p>
+
+<p>// Apply all of the edits in <em>edit to the current state.
+void Apply(VersionEdit</em> edit) {
+  ...
+  for (size_t i = 0; i &lt; edit->new_files_.size(); i++) {</p>
+
+<pre><code>const int level = edit-&gt;new_files_[i].first;
+FileMetaData* f = new FileMetaData(edit-&gt;new_files_[i].second);
+f-&gt;refs = 1;
+// We arrange to automatically compact this file after
+// a certain number of seeks.  Let's assume:
+//   (1) One seek costs 10ms
+//   (2) Writing or reading 1MB costs 10ms (100MB/s)
+//   (3) A compaction of 1MB does 25MB of IO:
+//        1MB read from this level
+//        10-12MB read from next level(boundaries may be misaligned)
+//        10-12MB written to next level
+// This implies that 25 seeks cost the same as the compaction
+// of 1MB of data.  I.e., one seek costs approximately the
+// same as the compaction of 40KB of data.  We are a little
+// conservative and allow approximately one seek for every 16KB
+// of data before triggering a compaction.
+// 1次seek相当与compact 40kb的data,
+// 那么n次seek大概和compact一个sstable相当(n = sstable_size / 40kb)
+// 保守点，这里搞了个16kb
+f-&gt;allowed_seeks = (f-&gt;file_size / 16384);  // 2^14 == 16384 == 16kb
+if (f-&gt;allowed_seeks &lt; 100) f-&gt;allowed_seeks = 100;
+...
+</code></pre>
+
+<p>  }
+  ...
+}
+<code>``
+- 当一个新的sstable建立时，会有一个allowed_seeks的初值：
+  - 作者认为1次sstable的seek（</code>此处的seek就是指去sstable里查找指定key`），相当于compact 40kb的数据，那么 sstable size / 40kb  次的seek操作，大概和compact 一个 sstable相当
+  - 保守的做法，allowed_seeks的初值为file_size/16kb
+  - 如果allowed_seeks小于100，令其为100
+- 每当Get操作触发磁盘读，即sstable被读取，该数值就会减一；如果有多个sstable被读取，则仅首个被读取的sstable的sllowed_seeks减一
+- allowed_seeks == 0 时，该sstable以及其所处level会被标识起来，等待触发 compaction</p>
+
+<h4>sstable选择：</h4>
+
+<ul>
+<li><p>针对size触发类型，默认从当前level的首个sstable开始执行</p></li>
+<li><p>seek触发相对简单，sstable已经选择好了</p></li>
+<li><p>对于level-0,需要将与选中的sstable存在key重叠的sstable也包含进此次compact</p></li>
+<li><p>对于level-(n+1)，需要将与level-n中选中的sstable存在key重叠的sstable包含进此次compact</p>
+
+<blockquote><p>由于level-(n+1)多个sstable的参与扩展了整个compact的key的范围, 我们可以使用该key范围将level-n中更多的sstable包含进此次compact
+前提是保证level-n更多sstable的参与不会导致level-(n+1)的sstable数量再次增长.
+同时，参与整个compaction的字节数不超过kExpandedCompactionByteSizeLimit = 25 * kTargetFileSize = 25 * 2MB;</p></blockquote></li>
+<li><p>为了保持公平，保证某个level中每个sstable都有机会参与compact:</p>
+
+<ul>
+<li>存储当前level首次compact的sstable(s)的largest key，存入compact_point_[level]</li>
+<li>当前level如果再次被size触发进行compact时，选择首个largest key大于compact_point_[level] sstable进行compact</li>
+</ul>
+</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[leveldb源码笔记之MVCC && Manifest]]></title>
+    <link href="http://1feng.github.io/2016/08/24/mvcc-and-manifest/"/>
+    <updated>2016-08-24T15:51:00+08:00</updated>
+    <id>http://1feng.github.io/2016/08/24/mvcc-and-manifest</id>
+    <content type="html"><![CDATA[<h3>Key/Value</h3>
+
+<p>k/v级别的MVCC是通过sequence number来实现的：</p>
+
+<h4>Sequence Number</h4>
+
+<ul>
+<li><p>sequence number 是一个由VersionSet直接持有的全局的编号，每次写入（<code>注意批量写入时sequence number是相同的</code>），就会递增</p></li>
+<li><p>根据我们之前对写入操作的分析，我们可以看到，当插入一条key的时候，实际参与排序，存储的是key和sequence number以及type组成的
+InternalKey</p></li>
+<li><p>当我们进行Get操作时，我们只需要找到目标key，同时其sequence number &lt;= specific sequence number</p>
+
+<ul>
+<li>普通的读取，sepcific sequence number == last sequence number</li>
+<li>snapshot读取，sepcific sequenc number == snapshot sequence number</li>
+</ul>
+</li>
+</ul>
+
+
+<h4>Snapshot</h4>
+
+<p>snapshot 其实就是一个sequence number，获取snapshot，即获取当前的last sequence number</p>
+
+<p>例如：
+<code>cpp
+  string key = 'a';
+  string value = 'b';
+  leveldb::Status s = db-&gt;Put(leveldb::WriteOptions(), key, value);
+  assert(s.ok())
+  leveldb::ReadOptions options;
+  options.snapshot = db-&gt;GetSnapshot();
+  string value = 'c';
+  leveldb::Status s = db-&gt;Put(leveldb::WriteOptions(), key, value);
+  assert(s.ok())
+  // ...
+  // ...
+  value.clear();
+  s = db-&gt;Get(leveldb::ReadOptions(), key, &amp;value);   // value == 'c'
+  assert(s.ok())
+  s = db-&gt;Get(options, key, &amp;value);   // value == 'b'
+  assert(s.ok())
+</code></p>
+
+<ul>
+<li>我们知道在sstable compact的时候，才会执行真正的删除或覆盖，而覆盖则是如果发现两条相同的记录
+会丢弃旧的(sequence number较小)一条，但是这同时会破坏掉snapshot</li>
+<li>那么 key = 'a', value = 'b'是如何避免compact时被丢弃掉的呢？
+
+<ul>
+<li>db在内存中记录了当前用户持有的所有snapshot</li>
+<li>smallest snapshot = has snapshot ? oldest snapshot : last sequence number</li>
+<li>当进行compact时，如果发现两条相同的记录，只有当两条记录的sequence number都小于 smallest snapshot 时才丢弃掉其中sequence number较小的一条</li>
+</ul>
+</li>
+</ul>
+
+
+<h3>Sstable</h3>
+
+<p>sstable级别的MVCC是利用Version和VersionEdit实现的：</p>
+
+<p><img src="/images/blog_images/leveldb/mvcc.png" alt="" /></p>
+
+<h3>Mainifest</h3>
+
+<p>VersionEdit代表了一次状态转移，每次状态转移都写入mainifest文件，以便重启时recover</p>
+
+<p><img src="/images/blog_images/leveldb/write_a_manifest.png" alt="" /></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[leveldb源码笔记之sstable]]></title>
+    <link href="http://1feng.github.io/2016/08/22/sstable-summary/"/>
+    <updated>2016-08-22T11:19:00+08:00</updated>
+    <id>http://1feng.github.io/2016/08/22/sstable-summary</id>
+    <content type="html"><![CDATA[<h3>整体看下sstable的组要组成，如下：</h3>
+
+<p><img src="/images/blog_images/leveldb/sstable.png" alt="" /></p>
+
+<h3>sstalbe 生成细节</h3>
+
+<blockquote><p>sstable 生成时机:</p>
+
+<p>minor compaction</p>
+
+<blockquote><p>immutable-memtable 中的key/value dump到磁盘，生成sstable</p></blockquote>
+
+<p>major compaction</p>
+
+<blockquote><p>sstable compact（level-n sstable(s)与level-n+1 sstables多路归并）生成level-n+1的sstable</p></blockquote></blockquote>
+
+<h4>首先是写入data block:</h4>
+
+<p><img src="/images/blog_images/leveldb/write_a_data_block.png" alt="" /></p>
+
+<h4>data block都写入完成后，接下来是meta block:</h4>
+
+<p><img src="/images/blog_images/leveldb/write_a_meta_block.png" alt="" /></p>
+
+<h4>然后是data/meta block索引信息data/meta index block写入:</h4>
+
+<p><img src="/images/blog_images/leveldb/write_a_index_block.png" alt="" /></p>
+
+<h4>最后将index block的索引信息写入Footer</h4>
+
+<p><img src="/images/blog_images/leveldb/write_a_footer.png" alt="" /></p>
+
+<h4>一个完整的sstable形成!</h4>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[leveldb源码笔记之写入操作]]></title>
+    <link href="http://1feng.github.io/2016/08/18/leveldb-write/"/>
+    <updated>2016-08-18T15:03:00+08:00</updated>
+    <id>http://1feng.github.io/2016/08/18/leveldb-write</id>
+    <content type="html"><![CDATA[<h4>插入一条K/V记录</h4>
+
+<p><img src="/images/blog_images/leveldb/writer.png" alt="" /></p>
+
+<h4>持有Writer的线程进入Writers队列,细节如下：</h4>
+
+<p><img src="/images/blog_images/leveldb/writers_queue.png" alt="" /></p>
+
+<h4>MakeRoomForWrite的流程图：</h4>
+
+<p><img src="/images/blog_images/leveldb/make_room_for_write.png" alt="" /></p>
+
+<h4>记录会首先写入磁盘上的binlog，避免程序crash时内存数据丢失：</h4>
+
+<p><img src="/images/blog_images/leveldb/write_to_binlog.png" alt="" /></p>
+
+<blockquote><p>此处我们做了一个极度夸张的假设来做演示:两条记录的大小超出一个block的大小, 以至于被一切为三</p></blockquote>
+
+<h4>K/V记录插入内存中的Memtable:</h4>
+
+<p><img src="/images/blog_images/leveldb/write_to_memtable.png" alt="" /></p>
+]]></content>
+  </entry>
+  
+</feed>

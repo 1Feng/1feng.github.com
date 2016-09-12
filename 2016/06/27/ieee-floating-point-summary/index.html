@@ -1,0 +1,512 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>浮点数问题探究 - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="问题 最近在使用openresty实现一些业务，业务中设计了一套二进制编码，目前为49bit。真正实现的时候发现lua里不支持(u)int64, 只有double，同时bitops也只支持32位。没有多想，直接用double存储了编码的10进制，然后开始关注如何去支持位运算。
+结果可想而知： C- &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">浮点数问题探究</h2>
+	<div class="entry-content"><h3>问题</h3>
+
+<p>最近在使用openresty实现一些业务，业务中设计了一套二进制编码，目前为49bit。真正实现的时候发现lua里不支持(u)int64, 只有double，同时<a href="http://bitop.luajit.org/api.html">bitops</a>也只支持32位。没有多想，直接用double存储了编码的10进制，然后开始关注如何去支持位运算。
+结果可想而知：</p>
+
+<h5>C-module for lua</h5>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="c1">// bitop.c</span>
+</span><span class='line'><span class="cp">#include &lt;inttypes.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;lua.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;lauxlib.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;lualib.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="nf">tostring</span><span class="p">(</span><span class="n">lua_State</span><span class="o">*</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="n">lua_gettop</span><span class="p">(</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="kt">uint64_t</span> <span class="n">a</span> <span class="o">=</span> <span class="n">lua_tonumber</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>        <span class="kt">uint64_t</span> <span class="n">b</span> <span class="o">=</span> <span class="n">lua_tonumber</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+</span><span class='line'>        <span class="c1">//printf(&quot;%&quot;PRIu64&quot; %&quot;PRIu64&quot;\n&quot;, a, b);</span>
+</span><span class='line'>        <span class="c1">//printf(&quot;%&quot;PRIX64&quot; %&quot;PRIX64&quot;\n&quot;, a, b);</span>
+</span><span class='line'>        <span class="kt">char</span> <span class="n">str</span><span class="p">[</span><span class="mi">65</span><span class="p">];</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="mi">16</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="n">sprintf</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="s">&quot;%&quot;</span><span class="n">PRIx64</span><span class="p">,</span> <span class="n">a</span><span class="p">);</span>
+</span><span class='line'>            <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="mi">10</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="n">sprintf</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="s">&quot;%&quot;</span><span class="n">PRIu64</span><span class="p">,</span> <span class="n">a</span><span class="p">);</span>
+</span><span class='line'>            <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="kt">uint64_t</span> <span class="n">mask</span> <span class="o">=</span> <span class="mh">0x8000000000000000ULL</span><span class="p">;</span>
+</span><span class='line'>            <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>            <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="mi">64</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                    <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;1&#39;</span><span class="p">;</span>
+</span><span class='line'>                <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>                    <span class="k">if</span> <span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                        <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+</span><span class='line'>                    <span class="p">}</span>
+</span><span class='line'>                <span class="p">}</span>
+</span><span class='line'>                <span class="n">a</span> <span class="o">=</span> <span class="n">a</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>            <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>            <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+</span><span class='line'>            <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="k">const</span> <span class="n">luaL_Reg</span> <span class="n">lib</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// {&quot;lshift&quot;, lshift},</span>
+</span><span class='line'>    <span class="c1">// {&quot;rshift&quot;, rshift},</span>
+</span><span class='line'>    <span class="c1">// {&quot;band&quot;, band},</span>
+</span><span class='line'>    <span class="c1">// {&quot;bor&quot;, bor},</span>
+</span><span class='line'>    <span class="p">{</span><span class="s">&quot;tostring&quot;</span><span class="p">,</span> <span class="n">tostring</span><span class="p">},</span>
+</span><span class='line'>    <span class="p">{</span><span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">}</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">luaopen_bitop</span><span class="p">(</span><span class="n">lua_State</span><span class="o">*</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="n">luaL_register</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="s">&quot;bitop&quot;</span><span class="p">,</span> <span class="n">lib</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="c1">// gcc bitop.c -std=c99 -I/usr/local/luajit/include/luajit-2.1 -fPIC -shared -o bitop.so</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>简单测试下：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='lua'><span class='line'><span class="c1">-- test.lua</span>
+</span><span class='line'><span class="kd">local</span> <span class="n">bit</span> <span class="o">=</span> <span class="nb">require</span> <span class="s2">&quot;</span><span class="s">bitop&quot;</span>
+</span><span class='line'><span class="kd">local</span> <span class="n">a</span> <span class="o">=</span> <span class="n">bit</span><span class="p">.</span><span class="n">lshift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">2^63 in dec : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mi">2</span><span class="o">^</span><span class="mi">63</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">2^63 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mi">2</span><span class="o">^</span><span class="mi">63</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">2^64 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mi">2</span><span class="o">^</span><span class="mi">64</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFF in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFF</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFF000 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFF000</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFF000 in dec : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFF000</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFF000 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFF000</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFFF00 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFFF00 in dec : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFFF00 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0000FFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0000FFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x000FFFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x000FFFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x00FFFFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x00FFFFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0FFFFFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0FFFFFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0FFFFFFFFFFFFF00 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0FFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0FFFFFFFFFFFFFF0 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0FFFFFFFFFFFFFF0</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFF0FFFFFFFFFF00 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFF0FFFFFFFFFF00</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='lua'><span class='line'><span class="mi">2</span><span class="o">^</span><span class="mi">63</span> <span class="k">in</span> <span class="n">dec</span> <span class="p">:</span>     <span class="mi">9223372036854775808</span>
+</span><span class='line'><span class="mi">2</span><span class="o">^</span><span class="mi">63</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>     <span class="mi">1000000000000000000000000000000000000000000000000000000000000000</span>
+</span><span class='line'><span class="mi">2</span><span class="o">^</span><span class="mi">64</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>     <span class="mi">0</span>
+</span><span class='line'><span class="mh">0xFFFF</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>  <span class="mi">1111111111111111</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFF000</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>  <span class="mi">1111111111111111111111111111111111111111111111111111000000000000</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFF000</span> <span class="k">in</span> <span class="n">dec</span> <span class="p">:</span>  <span class="mi">18446744073709547520</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFF000</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fffffffffffff000</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>  <span class="mi">0</span>                              <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">dec</span> <span class="p">:</span>  <span class="mi">0</span>                              <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">0</span>                              <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0x0000FFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">ffffffffffff</span>
+</span><span class='line'><span class="mh">0x000FFFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fffffffffffff</span>
+</span><span class='line'><span class="mh">0x00FFFFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">100000000000000</span>                <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0x0FFFFFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">1000000000000000</span>               <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0x0FFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fffffffffffff00</span>
+</span><span class='line'><span class="mh">0x0FFFFFFFFFFFFFF0</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">1000000000000000</span>               <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0xFFF0FFFFFFFFFF00</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fff1000000000000</span>               <span class="c1">-- ？？</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>很明显是发生了溢出，但是却没有明显规律，毕竟2<sup>63</sup> 没有溢出，但是为什么比他小的却溢出了。</p>
+
+<p>之前啃<a href="https://book.douban.com/subject/1230413/">CSAPP</a>时看到过浮点数的binary形式（<a href="https://en.wikipedia.org/wiki/IEEE_floating_point">IEEE 754</a>）和整型是完全不一样的，猜测肯定是lua中int64&#8212;>double有溢出/精度丢失，具体什么情况下会触发必须搞清楚，不然这套编码方案就成了纸上谈兵了。</p>
+
+<h3>IEEE 754</h3>
+
+<p>回去翻<a href="https://book.douban.com/subject/1230413/">CSAPP</a>，结合网上一些讲解，简单总结下IEEE 754里面的一些关键点</p>
+
+<p>根据<a href="https://en.wikipedia.org/wiki/IEEE_floating_point">IEEE 754</a>的规定，浮点数二进制计算公式为：V = (-1)<sup>S</sup> * M * 2<sup>E</sup></p>
+
+<p>二进制格式表示如下：</p>
+
+<p><img src="/images/blog_images/float.png" alt="" /></p>
+
+<p>其中:</p>
+
+<ul>
+<li><strong>Sign(s) </strong>:  用于决定这个数是正数(s=0)还是负数(s=1)</li>
+<li><strong>Exponent(exp)</strong>:  exp = ek-1···e1e0 （二进制表示）是一个无符号数，用于编码E
+
+<ul>
+<li>E = exp-Bias，用于对浮点数加权</li>
+<li>Bias = 2<sup>(k-1)</sup> -1</li>
+</ul>
+</li>
+<li><strong>Fraction(frac)</strong>:  n位小数字段frac = fn-1···f1f0（二进制表示）, 用于编码尾数M, 范围是1~2-ε或0~1-ε
+同时：</li>
+<li><strong>单精度(float)</strong>: K = 8, N = 23</li>
+<li><strong>双精度(double)</strong>: K = 11, N = 52</li>
+</ul>
+
+
+<p>根据exp的值，有三种不同情况的编码，用以覆盖所以情况，如下：
+<img src="/images/blog_images/float1.png" alt="" /></p>
+
+<ul>
+<li><strong>规格化的</strong>：
+
+<ul>
+<li>此时M的范围为1~2-ε，M = 1. fn-1fn-2···f1f0 (此为二进制表示，隐含的以1开头的 )</li>
+</ul>
+</li>
+<li><strong>非规格化的</strong>：
+
+<ul>
+<li>E = 1 - Bias</li>
+<li>M的范围为0~1-ε，M =  0. fn-1fn-2···f1f0</li>
+<li>为什么需要非规格化，因为规格化的表示法无法表示0</li>
+</ul>
+</li>
+<li><strong>特殊值</strong>：
+
+<ul>
+<li>可表示正无穷，负无穷，用以表示大数相乘，或者除以零时的溢出结果</li>
+<li>NaN 用于表示非实数，或者无穷</li>
+</ul>
+</li>
+</ul>
+
+
+<p>举个例子，将如下单精度二进制表示形式转换为浮点数表示：
+<img src="/images/blog_images/float2.png" alt="" /></p>
+
+<ol>
+<li>因为M是隐含的以1开头的，我们在小数点前补1，小数点后按frac来排放，则M = 1.1111111(二进制)</li>
+<li>exp = 10000110(二进制) = 134</li>
+<li>E = exp - Bias = 134 - （2<sup>7</sup> - 1）= 134-127 = 7</li>
+<li>V = 1 * 1.1111111(二进制) * 2<sup>7</sup> = 11111111（二进制）= 511</li>
+</ol>
+
+
+<p>511逆向转为float：</p>
+
+<ol>
+<li>511 = 2<sup>9</sup> - 1 = 11111111(二进制) = 1.1111111(二进制) * 2<sup>7</sup></li>
+<li>因为规格化的浮点数M的取值范围为1~2-ε，则可以把511转换为1.1111111(二进制) * 2<sup>7</sup></li>
+<li>则M = 1.1111111(二进制)</li>
+<li>因为M是隐含的以1开头的，开头的1不需要存储，所以 f = 11111110000000000000000(二进制)， 填充进frac</li>
+<li>E = exp-Bias = exp - (2<sup>7</sup> - 1) = 7, 所以exp = 7 + 127 = 134 = 10000110(二进制)， 填充进exp</li>
+<li>511为正数，所以s位置为0</li>
+</ol>
+
+
+<p>511逆向转为double：</p>
+
+<ol>
+<li>511 = 1.1111111(二进制) * 2<sup>7</sup></li>
+<li>与float相同，M =  1.1111111(二进制)</li>
+<li>所以 f = 11111110000000000000000000000&#8230;000(53位二进制)， 填充进frac</li>
+<li>E = exp-Bias = exp - (2<sup>10</sup> - 1) = 7, 所以exp = 7 + 1023 = 1030 = 10000000110(二进制)， 填充进exp</li>
+<li>正数，是位置为0</li>
+</ol>
+
+
+<h3>问题探究</h3>
+
+<p>那么文章开头我们的问题，double类型究竟可以表示多大的整数，以及为什么？</p>
+
+<p>根据上文的IEEE754标准，以及我们针对511的正反转换举例，可以看到，其实不管是浮点数还是整数其二进制形式其实都是存放在了frac中：</p>
+
+<ol>
+<li>针对double，直观上看上最大可存放n+1 = 53位（加1是因为M是隐含的以1开头的，小数点前的1无需存储），即最大2<sup>53-1</sup></li>
+<li>必须提到的一点是如果frac中存放不下的时候，低位会被舍弃，浮点数也会因此出现精度丢失，如果是整数则意味着被截断了</li>
+<li>根据2我们可以看出来，如果是低位为0，被舍弃其实是不受影响的，所以2<sup>53也是可以在double里正确表示的</sup></li>
+<li>同理2<sup>63也是可以表示的</sup> &#8212;&#8212;- 这解释了我们文章开头问题中溢出没有规律的问题</li>
+<li>而且2<sup>53</sup> + 2 也是可以表示的</li>
+<li>以此类推</li>
+</ol>
+
+
+<p>所以，只能说double可以连续表达的最大的整数上限是2<sup>53</sup></p>
+
+<h3>延伸阅读</h3>
+
+<p><a href="http://cenalulu.github.io/linux/about-denormalized-float-number/">你应该知道的浮点数基础知识</a></p>
+
+<blockquote><p>我也是看了里面的举例，结合CSAPP才弄清楚浮点数的，里面的st上的那个问题非常有意思，但是文章后面的关于为何会有非规格化浮点数的原因不太苟同：
+“不难看出浮点数的精度和指数范围有很大关系。最低不能低过2<sup>-7</sup> - 1最高不能高过2<sup>8</sup> - 1（其中剔除了指数部分全0和全1的特殊情况）”</p></blockquote>
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-06-27T15:35:00+08:00" pubdate data-updated="true">Jun 27<span>th</span>, 2016</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2016
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

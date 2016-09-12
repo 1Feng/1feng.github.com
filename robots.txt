@@ -1,4 +1,0 @@
-User-agent: *
-Disallow: 
-
-Sitemap: http://erenno1.github.com/sitemap.xml 

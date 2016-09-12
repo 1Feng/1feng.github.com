@@ -1,0 +1,198 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>leveldb源码笔记之写入操作 - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="插入一条K/V记录 持有Writer的线程进入Writers队列,细节如下： MakeRoomForWrite的流程图： 记录会首先写入磁盘上的binlog，避免程序crash时内存数据丢失： 此处我们做了一个极度夸张的假设来做演示:两条记录的大小超出一个block的大小, 以至于被一切为三 K/ &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">Leveldb源码笔记之写入操作</h2>
+	<div class="entry-content"><h4>插入一条K/V记录</h4>
+
+<p><img src="/images/blog_images/leveldb/writer.png" alt="" /></p>
+
+<h4>持有Writer的线程进入Writers队列,细节如下：</h4>
+
+<p><img src="/images/blog_images/leveldb/writers_queue.png" alt="" /></p>
+
+<h4>MakeRoomForWrite的流程图：</h4>
+
+<p><img src="/images/blog_images/leveldb/make_room_for_write.png" alt="" /></p>
+
+<h4>记录会首先写入磁盘上的binlog，避免程序crash时内存数据丢失：</h4>
+
+<p><img src="/images/blog_images/leveldb/write_to_binlog.png" alt="" /></p>
+
+<blockquote><p>此处我们做了一个极度夸张的假设来做演示:两条记录的大小超出一个block的大小, 以至于被一切为三</p></blockquote>
+
+<h4>K/V记录插入内存中的Memtable:</h4>
+
+<p><img src="/images/blog_images/leveldb/write_to_memtable.png" alt="" /></p>
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-08-18T15:03:00+08:00" pubdate data-updated="true">Aug 18<span>th</span>, 2016</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/leveldb/'>leveldb</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2016
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

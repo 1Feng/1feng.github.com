@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[Category: daemon | 1Feng's Blog]]></title>
-  <link href="http://erenno1.github.com/tags/daemon/atom.xml" rel="self"/>
-  <link href="http://erenno1.github.com/"/>
-  <updated>2014-11-29T23:52:17+08:00</updated>
-  <id>http://erenno1.github.com/</id>
+  <link href="http://1feng.github.io/tags/daemon/atom.xml" rel="self"/>
+  <link href="http://1feng.github.io/"/>
+  <updated>2016-09-11T00:07:10+08:00</updated>
+  <id>http://1feng.github.io/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
     <email><![CDATA[codingforfan@gmail.com]]></email>
@@ -15,9 +15,9 @@
   
   <entry>
     <title type="html"><![CDATA[如何实现一个daemon]]></title>
-    <link href="http://erenno1.github.com/2014/11/29/daemon-ho-to/"/>
+    <link href="http://1feng.github.io/2014/11/29/daemon-ho-to/"/>
     <updated>2014-11-29T16:46:00+08:00</updated>
-    <id>http://erenno1.github.com/2014/11/29/daemon-ho-to</id>
+    <id>http://1feng.github.io/2014/11/29/daemon-ho-to</id>
     <content type="html"><![CDATA[<p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
 
 <hr />

@@ -1,0 +1,429 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="函数指针 主要有以下两类： 一般函数指针（普通函数指针 and static 成员函数指针）
+非static成员函数指针 一般函数指针 初始化 普通函数指针 func_type func = function_name; or func_type func = &amp; &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner">
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2014/04/27/std-bind-in-c-plus-plus/">
+		
+			函数对象与std::bind</a>
+	</h2>
+	<div class="entry-content">
+		<hr />
+
+<h3>函数指针</h3>
+
+<p>主要有以下两类：</p>
+
+<ol>
+<li>一般函数指针（普通函数指针 and static 成员函数指针）</li>
+<li>非static成员函数指针</li>
+</ol>
+
+
+<h4>一般函数指针</h4>
+
+<h5>初始化</h5>
+
+<p>普通函数指针</p>
+
+<blockquote><p>func_type func = function_name;</p></blockquote>
+
+<p>or</p>
+
+<blockquote><p>func_type func = &amp;function_name;</p></blockquote>
+
+<p>static 成员函数指针</p>
+
+<blockquote><p>func_type func = ClassName::function_name;</p></blockquote>
+
+<p>or</p>
+
+<blockquote><p>func_type func = &amp;ClassName::function_name;</p></blockquote>
+
+<h5>调用</h5>
+
+<blockquote><p>function_name(arg);</p></blockquote>
+
+<p>or</p>
+
+<blockquote><p>(*function_name)(arg);</p></blockquote>
+
+<p><em>注：同数组名类似，对函数名而言 functin_name 和 &amp;function_name 是一样的，即地址相同，所以，上述的两种写法都可以</em></p>
+
+<h4>对于类的非static成员函数指针</h4>
+
+<h5>初始化</h5>
+
+<blockquote><p>func_type func = &amp;function_name;</p></blockquote>
+
+<h5>调用</h5>
+
+<blockquote><p>(obj.*func)(arg);</p></blockquote>
+
+<p>即，非static成员函数在初始化时，必须以&amp;的方式避免歧义，否则编译会报错为 <code>invalid use of non-static member function</code></p>
+
+<hr />
+
+<h3>函数对象</h3>
+
+<p>C++推荐使用函数对象（仿函数）来替代函数指针，这样可以避免指针操作带来的繁琐，切可以维护数据，使函数带有自己的状态
+函数对象主要通过重载operator()来实现，例如：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="k">struct</span> <span class="n">Max</span>
+</span><span class='line'> <span class="p">{</span>
+</span><span class='line'>   <span class="n">Max</span><span class="p">()</span><span class="err"> </span><span class="o">:</span> <span class="n">times</span><span class="p">()</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="kt">int</span> <span class="k">operator</span><span class="p">()(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">)</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Called &quot;</span> <span class="o">&lt;&lt;</span> <span class="o">++</span><span class="n">times</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; times match&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span><span class='line'>     <span class="k">return</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="n">b</span><span class="err"> </span><span class="o">?</span> <span class="n">a</span><span class="err"> </span><span class="o">:</span> <span class="n">b</span><span class="p">;</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="kt">int</span> <span class="n">times</span><span class="p">;</span>
+</span><span class='line'> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>同时我们可以声明一个函数对象</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="n">Max</span> <span class="n">max</span><span class="p">;</span>
+</span><span class='line'><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">func</span> <span class="o">=</span> <span class="n">max</span><span class="p">;</span>  <span class="c1">//拷贝</span>
+</span><span class='line'><span class="n">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">3</span><span class="p">);</span>
+</span><span class='line'><span class="n">func</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+</span><span class='line'><span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">ref</span><span class="p">(</span><span class="n">max</span><span class="p">);</span> <span class="c1">//引用该对象</span>
+</span><span class='line'><span class="n">func</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>output:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="n">Called</span> <span class="mi">1</span> <span class="n">times</span> <span class="n">match</span>
+</span><span class='line'><span class="n">Called</span> <span class="mi">1</span> <span class="n">times</span> <span class="n">match</span>
+</span><span class='line'><span class="n">Called</span> <span class="mi">2</span> <span class="n">times</span> <span class="n">match</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<hr />
+
+<h3>std::bind</h3>
+
+<blockquote><p>用于绑定函数参数，返回函数对象</p></blockquote>
+
+<h4>使用示例：</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="k">class</span> <span class="nc">Test</span>
+</span><span class='line'> <span class="p">{</span>
+</span><span class='line'> <span class="k">public</span><span class="o">:</span>
+</span><span class='line'>   <span class="kt">void</span> <span class="n">print</span><span class="p">()</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="o">++</span><span class="n">value</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="kt">void</span> <span class="n">addX</span><span class="p">(</span><span class="kt">int</span> <span class="n">x</span><span class="p">);</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>     <span class="n">value</span> <span class="o">+=</span> <span class="n">x</span><span class="p">;</span>
+</span><span class='line'>     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="n">value</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'> <span class="k">private</span><span class="o">:</span>
+</span><span class='line'>   <span class="kt">int</span> <span class="n">value</span><span class="p">;</span>
+</span><span class='line'> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'> <span class="n">Test</span> <span class="n">test</span><span class="p">;</span>
+</span><span class='line'> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">print</span><span class="p">,</span> <span class="n">test</span><span class="p">);</span>  <span class="c1">//test 传值</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 1</span>
+</span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 1</span>
+</span><span class='line'> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">print</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">);</span>    <span class="c1">//传引用</span>
+</span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 2</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 3</span>
+</span><span class='line'> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>  <span class="c1">//多参数绑定</span>
+</span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 8</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 9</span>
+</span><span class='line'> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">func1</span><span class="p">;</span>
+</span><span class='line'> <span class="n">func1</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">placeholders</span><span class="o">::</span><span class="n">_1</span><span class="p">);</span>  <span class="c1">//参数占位</span>
+</span><span class='line'> <span class="n">func1</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>      <span class="c1">//  value is 13</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 14</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>原理描述</h4>
+
+<p>bind普通函数</p>
+
+<p><img src="/images/blog_images/bind_1.png" alt="" /></p>
+
+<p>bind成员函数，如果绑定的是<code>*this</code>， 则内部调用时为<code>(v1.*fn)()</code></p>
+
+<p><img src="/images/blog_images/bind_2.png" alt="" /></p>
+
+<p>显式传递<code>this</code></p>
+
+<p><img src="/images/blog_images/bind_3.png" alt="" /></p>
+
+<p>占位预留参数</p>
+
+<p><img src="/images/blog_images/bind_4.png" alt="" /></p>
+
+<hr />
+
+<h3>相关参考&amp;援引</h3>
+
+<ol>
+<li><a href="http://www.cprogramming.com/tutorial/function-pointers.html">函数指针</a></li>
+<li><a href="http://www.cprogramming.com/tutorial/functors-function-objects-in-c++.html">函数对象</a></li>
+<li><a href="http://stackoverflow.com/questions/6893285/why-do-all-these-crazy-function-pointer-definitions-all-work-what-is-really-goi">&#8220;&amp;&#8221; in ordinary functions pointer</a></li>
+<li><a href="http://blog.think-async.com/2010/04/bind-illustrated.html">《bind illustrated》 &#8212; Christopher M. Kohlhoff </a></li>
+</ol>
+
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-04-27T14:51:00+08:00" pubdate data-updated="true">Apr 27<span>th</span>, 2014</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/cpp/'>cpp</a>, <a class='category' href='/tags/std-bind/'>std::bind</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2014/04/27/std-bind-in-c-plus-plus/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2014/04/27/hello-world/">
+		
+			Hello World</a>
+	</h2>
+	<div class="entry-content">
+		<p>hello world</p>
+
+<p>hello world</p>
+
+<p>hello world</p>
+
+<p>hello world</p>
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-04-27T14:45:00+08:00" pubdate data-updated="true">Apr 27<span>th</span>, 2014</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/hello/'>hello</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2014/04/27/hello-world/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+<nav id="pagenavi">
+    
+        <a href="/" class="prev">Prev</a>
+    
+    
+    <div class="center"><a href="/blog/archives">Blog Archives</a></div>
+</nav></div>
+	<footer id="footer" class="inner">Copyright &copy; 2016
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>
