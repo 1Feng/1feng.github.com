@@ -91,7 +91,7 @@ char buf[sizeof(file_number)];
 EncodeFixed64(buf, file_number);
 Slice key(buf, sizeof(buf));
 ```
-- value: TableCache， 其实主要是sstable index block里的数据
+- value: TableAndFile， 其实主要是sstable index block里的数据
 ```cpp
 // table_cache.cc
 struct TableAndFile {
