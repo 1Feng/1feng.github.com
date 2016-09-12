@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "leveldb源码笔记之Read"
+title: "leveldb源码笔记之读操作"
 date: 2016-09-10 22:07
 comments: true
 categories: 
