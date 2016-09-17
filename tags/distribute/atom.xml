@@ -4,7 +4,7 @@
   <title><![CDATA[Category: distribute | 1Feng's Blog]]></title>
   <link href="http://1feng.github.io/tags/distribute/atom.xml" rel="self"/>
   <link href="http://1feng.github.io/"/>
-  <updated>2016-09-17T20:56:35+08:00</updated>
+  <updated>2016-09-17T21:08:08+08:00</updated>
   <id>http://1feng.github.io/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -20,7 +20,7 @@
     <id>http://1feng.github.io/2016/09/10/leveldb-read</id>
     <content type="html"><![CDATA[<h3>key逻辑分类</h3>
 
-<p>根据我们之前文章的描述，leveldb的数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储格式会略微有差异，区分一下几种格式：</p>
+<p>根据我们之前文章的描述，leveldb的数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储格式会略微有差异，代码里按照存储的位置，划分为以下几种类型：</p>
 
 <blockquote><p><strong>memtable</strong>: 逻辑上称为memtable_key</p>
 
