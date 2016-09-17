@@ -7,7 +7,7 @@
 	<meta name="author" content="Travis Swicegood">
 
 	
-	<meta name="description" content="key逻辑分类 根据我们之前文章的描述，leveldb是数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储会略微有差异 memtable: 逻辑上称为memtable_key sstalbe: 逻辑上称为internal_key key: 用户提供的key &hellip;">
+	<meta name="description" content="key逻辑分类 根据我们之前文章的描述，leveldb的数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储格式会略微有差异，区分一下几种格式： memtable: 逻辑上称为memtable_key sstalbe: 逻辑上称为internal_key &hellip;">
 	
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
@@ -81,7 +81,7 @@
 	<h2 class="title">Leveldb源码笔记之读操作</h2>
 	<div class="entry-content"><h3>key逻辑分类</h3>
 
-<p>根据我们之前文章的描述，leveldb是数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储会略微有差异</p>
+<p>根据我们之前文章的描述，leveldb的数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储格式会略微有差异，区分一下几种格式：</p>
 
 <blockquote><p><strong>memtable</strong>: 逻辑上称为memtable_key</p>
 
