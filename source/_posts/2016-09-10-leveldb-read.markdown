@@ -10,7 +10,7 @@ categories:
 ---
 ###key逻辑分类
 
-根据我们之前文章的描述，leveldb是数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储会略微有差异
+根据我们之前文章的描述，leveldb的数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储格式会略微有差异，区分一下几种格式：
 
 >**memtable**: 逻辑上称为memtable_key
 
