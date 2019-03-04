@@ -1,0 +1,447 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>What is ACID - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="What Atomicity 描述： 一个事务包含一系列的操作，这一系列的操作都成功，则意味着事务执行成功；一旦执行过程中发生故障(fault)，数据库需要放弃整个事务，并且撤销已经完成的部分操作 优势： 方便异常处理，如果事务终止，应用层面可以确保什么修改都没有发生，可以安全的重试 典型案例： &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">What Is ACID</h2>
+	<div class="entry-content"><h1>What</h1>
+
+<h2>Atomicity</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一个事务包含一系列的操作，这一系列的操作都成功，则意味着事务执行成功；一旦执行过程中发生故障(fault)，数据库需要放弃整个事务，并且撤销已经完成的部分操作</p>
+
+<p><strong>优势</strong>：</p>
+
+<p>方便异常处理，如果事务终止，应用层面可以确保什么修改都没有发生，可以安全的重试</p>
+
+<p><strong>典型案例</strong>：</p>
+
+<p>A向B账户转账100元：
+ 1. 从A的账户减少100元
+ 2. 从B的账户增加100元</p>
+
+<p>如果1执行完成2还未执行，此时数据库故障(<code>system fails</code>)，则为了保证Atomicity，数据库的事务系统需要回滚1操作</p>
+
+<p><strong>其他</strong>：</p>
+
+<blockquote><p>这里需要与concurrency-atomic做一下区分, concurrency-atomic指的是当某个线程执行某个操作时，其他线程不可能看到中间状态(half-finished)</p></blockquote>
+
+<h2>Consistency</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>这里的consistency是指，当事务结束时，系统（数据库）处于一个合法的状态(valid state),也就是说系统总是从一个合法的状态迁移至另一个合法的状态</p>
+
+<p><strong>其他</strong>：</p>
+
+<ol>
+<li>ACID-consistency是一个比较模糊的概念，状态迁移是系统的用户来保证的，系统只能保证其中一部分，不能完全覆盖，所以consistency依赖用户而不是系统</li>
+<li>MSDN给出的例子<a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">[2]</a>和Atomicity类似，但是差别在于A中事务终止回滚时因为system fails，而C中事务终止回滚是因为error（比如类型不匹配，数字和字符串做加法？）</li>
+<li>ACID-consistency 和CAP-consistency直接没有任何关系，仅仅使用了同一个单词而已</li>
+</ol>
+
+
+<h2>Islation</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>Isolation是指当多个事务并发(concurrency)执行时，应该彼此之间存在隔离，执行过程中互不影响</p>
+
+<h2>Durability</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一旦事务成功提交，即使发生硬件故障或者程序崩溃，任何已经写入的数据都不能丢失</p>
+
+<h1>How</h1>
+
+<h2>Atomicity ★★★★</h2>
+
+<p>可以利用持久化日志来实现，方便重启回滚</p>
+
+<h2>Consistency ★★</h2>
+
+<p>数据库层面做足够的合法性检测，其他由用户层/应用层来保证</p>
+
+<h2>Islation ★★★★★</h2>
+
+<p><strong>先看几点要求</strong>：</p>
+
+<ul>
+<li>Read commited（weak-islation type） 的两点要求
+
+<ul>
+<li>No Dirty Read: 不会读取到其他正在执行的事务中间状体的数据</li>
+<li>No Dirty Write: 事务不会overwrite到其他事务的uncommitted的数据</li>
+</ul>
+</li>
+<li>No Read Skew：
+
+<ul>
+<li>Read Skew举例：
+
+<ul>
+<li>A 在两个账户中各存放了500块钱，现在A要查询两个账户的余额</li>
+<li>查询账户1的SQL执行完成，余额500</li>
+<li>假设A之前设置了一笔定时的自动转账被触发，从账户2向账户1转100块，事务执行成功，账户1余额600，账户2余额400</li>
+<li>查询账户2的SQL执行完成，余额400</li>
+<li>在A看来，账户总额少了100块</li>
+<li>即使如此这个场景还是可以接受的，因为A可以重新查询，即可获得正常结果</li>
+</ul>
+</li>
+<li>无法接受Read Skew的两个场景：
+
+<ul>
+<li>Backup
+
+<ul>
+<li>事务执行的同时，可以完成数据备份</li>
+</ul>
+</li>
+<li>Analytic Queries and Integrity checks
+
+<ul>
+<li>事务执行的同时, 需要完成大量数据的查询或扫描</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Read-Modify-Write / Atomic Write Operation
+
+<ul>
+<li>举例：两个用户同时对一个counter字段做inc操作，后果与多线程并发操作类似会丢失一部分inc操作</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>举例（针对multi-object的场景）：
+
+<ul>
+<li>两位医生Alice 和 Bob同时检查当前是否有另外一个人正在值班，如果有则在系统中停止自己的值班状态，然后回家睡觉</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sql'><span class='line'><span class="n">Alice</span><span class="err">执行事务如下：</span>
+</span><span class='line'><span class="n">currently_on_call</span> <span class="o">=</span> <span class="p">(</span><span class="k">select</span> <span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">from</span> <span class="n">doctors</span> <span class="k">where</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span><span class="p">)</span>
+</span><span class='line'><span class="n">if</span> <span class="p">(</span><span class="n">currently_on_call</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="err">{</span>
+</span><span class='line'>    <span class="k">update</span> <span class="n">doctors</span> <span class="k">set</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">where</span> <span class="n">name</span><span class="o">=</span><span class="err">‘</span><span class="n">Alice</span><span class="err">’</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span>
+</span><span class='line'><span class="err">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">Bob</span><span class="err">执行事务如下：</span>
+</span><span class='line'><span class="n">currently_on_call</span> <span class="o">=</span> <span class="p">(</span><span class="k">select</span> <span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">from</span> <span class="n">doctors</span> <span class="k">where</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span><span class="p">)</span>
+</span><span class='line'><span class="n">if</span> <span class="p">(</span><span class="n">currently_on_call</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="err">{</span>
+</span><span class='line'>    <span class="k">update</span> <span class="n">doctors</span> <span class="k">set</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">where</span> <span class="n">name</span><span class="o">=</span><span class="err">‘</span><span class="n">Bob</span><span class="err">’</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span>
+</span><span class='line'><span class="err">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="err">有点像是</span><span class="n">multi</span><span class="o">-</span><span class="k">object</span><span class="err">版本的</span><span class="k">read</span><span class="o">-</span><span class="k">modify</span><span class="o">-</span><span class="k">write</span><span class="err">，但是有本质区别</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>解决方案</strong>：</p>
+
+<ul>
+<li>Read commited
+
+<ul>
+<li>Dirty Write: 可以使用row-level lock来避免dirty write</li>
+<li>Dirty Read:
+
+<ul>
+<li>同样可以使用row-level lock来避免dirty read,但是缺点在于一个比较耗时的写操作会阻塞住read-only的操作，更严重的是会因此引发连锁反应</li>
+<li>更好的解决方法是使用类似于MVCC的snapshot-isolation方案来解决dirty read的问题</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>No Read Skew
+
+<ul>
+<li>类似于MVCC的snapshot-isolation方案来解决read skew问题，可同时满足Backup和Analytic Queries and Integrity checks的需求</li>
+</ul>
+</li>
+<li>Read-Modiry-Write / Atomic Write Operation
+
+<ul>
+<li>使用显示的锁操作(explicit-locking)来实现atomic write operation</li>
+<li>automatically-detecting-lost-update，一旦检测到lost update，事务需要终止并且retry</li>
+<li>实现compare-and-set操作用以支持SQL-where语句</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>串行化（serializability）隔离所有事务，这种方式可以解决上述除read skew外所有问题，但是工程实现上往往性能会是一个非常大的问题</li>
+</ul>
+</li>
+</ul>
+
+
+<blockquote><p>通常为了实现isolation，都是综合以上各种方案</p></blockquote>
+
+<h2>Durability ★★★★</h2>
+
+<p>磁盘+replica</p>
+
+<h1>Serializability</h1>
+
+<h2>What</h2>
+
+<blockquote><p>serializable-isolation 是最强等级的事务并发隔离，他可以确保即使多个事务是并行(parallel)执行的,最终的结果看起来也像是顺序的（serially），每个时间点只有一个事务在执行</p></blockquote>
+
+<h2>How</h2>
+
+<blockquote><p>根据上述描述，不难看出，其要求是让数据库解决所有的可能的并发竞争问题</p></blockquote>
+
+<ul>
+<li>真的串行化的执行事务：</li>
+<li>方法：将所有的事务扔到一个队列里排队，由特定的线程来依次执行</li>
+<li>缺点：性能太差</li>
+<li>存储过程（stored procedures）+ in-memory data：</li>
+<li>解释：本质是加快单个事务的执行速度（没有了磁盘IO），以便可以真正串行化事务执行</li>
+<li>缺点：存储过程需要用户自己来用SQL/PL完成，调试测试监控都比较棘手，同时一旦用户完成的存储过程性能比较差，会造成恶劣的影响，甚至引发连锁反应</li>
+<li>数据分区(partitioning)</li>
+<li>解释：本质是将单机的性能问题通过scale out来加速</li>
+<li>缺点：事务执行涉及的数据不能跨分区</li>
+<li>Two-Phase-Locking(2PL)</li>
+<li>描述：
+
+<ul>
+<li>当事务需要读一个object时，必须先以shared mode获取锁；多个事务可以同时以shared mode获取锁，但是一旦有事务以exclusive mode持有了锁，其他事务必须等待</li>
+<li>如果事务想要写一个object，必须先以exclusive mode获取锁；区别于shared mode，同一时间只能有一个事务以exclusive mode持有锁</li>
+<li>如果事务先读一个object，然后又要写（read-modify-write）,则需要将锁从shared mode升级为exclusive mode</li>
+<li>一旦事务获取了锁，除非事务提交或者终止，否则不允许释放锁，这也是二阶段命名的由来；</li>
+</ul>
+</li>
+<li>解释：
+
+<ul>
+<li>Expanding phase（扩大阶段&#8211;事务执行中）: locks are acquired and no locks are released.</li>
+<li>Shrinking phase（收缩阶段&#8211;事务结束时）: locks are released and no locks are acquired.</li>
+</ul>
+</li>
+<li>缺点：
+
+<ul>
+<li>吞吐量(through-put) 和 响应时间 与仅实现weak-isolation(如read-commit + No Read Skew)相比会比较差</li>
+<li>deadlock风险增大</li>
+</ul>
+</li>
+<li>Serializable Snapshot Isolation(SSI)</li>
+<li>与之前提到的snapshot-isolation相比，SSI为写操作增加了串行(serialization)冲突检测
+
+<ul>
+<li>detecting stale MVCC reads：针对write skew，如果事务提交时检测到之前的前置条件已经不成立了，则终止事务</li>
+<li>detecting writes that affect prior read：同样考虑write skew，数据库从index-level/table-level保存一些信息，以便当事务提交后可以检测其操作是否造成其他正在执行的事务读取的数据过期（前置条件失效），如果存在则主动通知该事务终止</li>
+</ul>
+</li>
+</ul>
+
+
+<h2>Serializability VS Linearizability</h2>
+
+<ul>
+<li>serializability： 事务隔离的属性，指事务执行的结果看起来像顺序的（串行的），以避免write skew</li>
+<li>linearizability： 指对读写共享数据的新近性（recency guarantee），与事务（把一系列操作看做整体来讨论）无关</li>
+</ul>
+
+
+<h1>References</h1>
+
+<p>[1]. <a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》7.Transactions</a></p>
+
+<p>[2]. <a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">ACID properties</a></p>
+
+<p>[3]. <a href="http://www.bailis.org/blog/linearizability-versus-serializability/Linearizability">Linearizability versus Serializability</a></p>
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-07T23:59:00+08:00" pubdate data-updated="true">Jun 7<span>th</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

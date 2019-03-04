@@ -1,0 +1,2311 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="创新点 把组件故障当做常态，而不是异常。即，要有完备的监控，错误检测，故障恢复机制
+通常文件都是巨大的，数以GB是常态
+多数文件的修改是追加新数据，而不是覆盖已有数据
+综合应用以及系统API一起来设计，从而增加整个系统的灵活性 设计假设 整个系统构建在许多廉价的商用组件之上，所以故障是在所难免的 &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner">
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2016/07/08/google-file-system-summary/">
+		
+			Google File System 笔记</a>
+	</h2>
+	<div class="entry-content">
+		<hr />
+
+<h3>创新点</h3>
+
+<ul>
+<li>把组件故障当做常态，而不是异常。即，要有完备的监控，错误检测，故障恢复机制</li>
+<li>通常文件都是巨大的，数以GB是常态</li>
+<li>多数文件的修改是追加新数据，而不是覆盖已有数据</li>
+<li>综合应用以及系统API一起来设计，从而增加整个系统的灵活性</li>
+</ul>
+
+
+<h3>设计假设</h3>
+
+<ul>
+<li>整个系统构建在许多廉价的商用组件之上，所以故障是在所难免的</li>
+<li>系统存储了适当数量（几千万）的大文件，大小从几百MB到数以GB不等</li>
+<li>读操作通常包含大量的流式读取，和少量的随机读。应用可以通过对小的读取操作组合排序成批量操作从而提高效率</li>
+<li>写操作通常是许多大量的顺序的写来追加数据到文件里</li>
+<li>对于多client向同一文件并发append的情况，系统必须有效实现一套明确定义的规则</li>
+<li>持续的高带宽比低延迟更重要</li>
+</ul>
+
+
+<h3>接口</h3>
+
+<p>只支持了一些常规的create，delete，open，close，read 以及 write接口，并没有支持POSIX标准的接口</p>
+
+<h3>架构</h3>
+
+<h4>整体架构图</h4>
+
+<p><img src="/images/blog_images/gfs01.jpg" alt="" /></p>
+
+<ul>
+<li>系统整体由master，chunkservers，client三部分组成</li>
+<li>文件的存储单元为chunk，chunk size = 64M(一般FS也就kb级别)，默认每个chunk有3个备份（可配置）
+
+<ul>
+<li>大chunksize的优点：
+
+<ul>
+<li>可以利用client的cache，有效减少client同master的交互</li>
+<li>意味着client能够在同一个chunkserver上执行更多的操作，节省了网络开销(如果chunksize过小，极端情况下一次数据读取要和多个chunkservers进行交互)</li>
+<li>大的chunk size 可以有效减少master上metadata的存储量</li>
+</ul>
+</li>
+<li>大的chunksize的缺点：
+
+<ul>
+<li>如果某个chunk 的访问过热，单机就会变为热点
+
+<ul>
+<li>解决方案：优化业务 or 允许client从其他client获取数据</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>只有一个master角色，用以存储文件的元数据信息，同时这些元数据信息会备份在多个远程机器上</li>
+<li>Master通过HeartBeat与chunkservers保持通讯</li>
+</ul>
+
+
+<h4>数据一致性模型</h4>
+
+<blockquote><p>GFS放宽了数据的一致性模型，从而降低系统的复杂度以及可以高效的实现</p></blockquote>
+
+<h5>Namespace</h5>
+
+<ul>
+<li>Namespace的修改（例如文件创建，重命名）操作是原子性的</li>
+</ul>
+
+
+<h5>File Region State</h5>
+
+<ul>
+<li>File Region的状态取决于其修改的类型以及操作结果（成功与否），如图：
+
+<ul>
+<li><img src="/images/blog_images/gfs03.jpg" alt="" /></li>
+<li>Consisitent：不管从哪个replica读取数据，client看到的都是相同的数据</li>
+<li>Inconsistent:  一般由操作失败引起</li>
+<li>Defined：当一个改动操作完成，数据是consistent状态，并且client可以看到改动的内容</li>
+<li>Undefined：
+
+<ul>
+<li>并发操作存在相互影响时，数据虽然是consistent状体，但是无法看出每个client的修改（<code>例如并发的在同一个位置写入两次</code>）</li>
+<li>inconsistent</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>概念区分（mutation）：
+
+<ul>
+<li>write: 向application指定的位置写入数据，offset由application指定</li>
+<li>record append：即使并发操作情形，也会保证append  atomically at leaset once，offset是GFS选择的</li>
+</ul>
+</li>
+<li>How to：
+
+<ul>
+<li>Success:
+
+<ul>
+<li>通过确保mutations的顺序在所有的replicas上一致来保证defined</li>
+<li>使用chunk version number来检测旧的数据(某chunksever宕机时，mutation依旧会Success，然后导致旧数据产生)</li>
+</ul>
+</li>
+<li>Failure:
+
+<ul>
+<li>利用Master和chunkservers的心跳以及数据的checksum来检测操作失败生成的脏数据（通过其他replicas来恢复）
+
+<h5>Applications</h5></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>通过以下技术手段，application可以迁就GFS的较为放松的一致性模型
+
+<ul>
+<li>relying on appends rather than overwrites</li>
+<li>checkpointing</li>
+<li>writing self-validating</li>
+<li>self-identifying</li>
+</ul>
+</li>
+<li>场景举例：
+
+<ul>
+<li>场景一： writer创建一个文件，并且从开始到结束（<code>写满即结束？</code>）一直持有这个文件，当数据写完，文件会被writer被重命名为一个permanent name; 或者，writer周期性的通过checkpoint记录写入成功了多少（<code>不太明白啥意思</code>）
+
+<ul>
+<li>checkpoint可以包含application级别的校验码(checksum)</li>
+<li>reader只会检验和处理那些和checkpoint对比最新的file region，即defined状态的数据</li>
+<li>checkpoint可以允许writer增量重启并且让reader继续处理那些在application看来还未完成的数据</li>
+<li>不管是并发还是一致问题，当前这个场景都可以较好的应对</li>
+</ul>
+</li>
+<li>  场景二: 利用多路归并合，或者通过生产者消费者队列完成多个writer并发的append
+
+<ul>
+<li>  readers 处理偶然的padding和重复，如下：
+
+<ul>
+<li>由writer对写入的record增加额外的checksum</li>
+<li>由reader通过checksum来剔除掉额外的padding数据或者其他record fragments</li>
+<li>如果reader可以容忍偶然的重复（例如触发了非幂等的操作），可以通过唯一标识来剔除掉重复</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<h4>Master</h4>
+
+<p><img src="/images/blog_images/GFS02.png" alt="" /></p>
+
+<blockquote><p>上图为根据论文猜测的结构，比如location可能并不是以这种方式存储的，也有可能是通过所谓的chunk namespace来获取</p></blockquote>
+
+<h5>DATA</h5>
+
+<ul>
+<li><strong>Namespace</strong>
+
+<ul>
+<li>存储位置：disk + memory</li>
+<li>File Namespace：
+
+<ul>
+<li>启动时加载自Operation log</li>
+<li>数据结构为前缀压缩的lookup table，通常小于64byte</li>
+<li>namespace tree 的每个节点（node）都有一个关联的读写锁</li>
+<li>namespace的修改为原子操作（atomic）</li>
+</ul>
+</li>
+<li>Chunk namespace: <code>如果也是前缀压缩来实现，就解释不过去了，想不出chunk namespace有什么用</code>
+
+<ul>
+<li>论文中仅有两次提及，具体不详</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Access control information</strong>
+
+<ul>
+<li>存储位置：disk + memory</li>
+<li>备注： 文中较少提及，具体不详</li>
+</ul>
+</li>
+<li><strong>Mapping from files to chunks</strong>
+
+<ul>
+<li>存储位置：disk + memory</li>
+<li>详解：
+
+<ul>
+<li>每个文件都被切分为了固定大小的chunk，master里仅存放chunk handle 以及 location</li>
+<li>chunk handle 是个64bit的唯一标示（猜测是hash获得的,但是为什么不是chunknumber？）</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Current locations of chunks</strong>
+
+<ul>
+<li>存储位置：memory</li>
+<li>详解：
+
+<ul>
+<li>通过询问chunkserver获取，一般在启动或者有新chunkserver加入等情况下发生</li>
+<li>与client交互时会把client请求的chunk的所有location都返回，由client自己决定（就近）与哪个chunkserver交互</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Operation log</strong>
+
+<ul>
+<li>存储位置：disk</li>
+<li>详解：
+
+<ul>
+<li>存放了关键元数据的改动记录</li>
+<li>数据同时备份在remote machines上</li>
+<li>只有在数据刷新到磁盘上时，才响应client</li>
+<li>利用log replay来完成灾难恢复</li>
+<li>当日止文件超过一定大小，master会记录checkpoint（使用额外线程，不阻塞当前mutation）</li>
+<li>B-tree结构存储（可以直接被加载进内存）的checkpoint，方便快速定位，恢复
+
+<h5>功能</h5></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Namespace Management and Locking</strong>
+
+<ul>
+<li>简介：仅用于处理master内部操作(master&#8217;s operations)并发冲突</li>
+<li>例子：我们在对/home/user目录进行snapshot的时候，如何避免同一时间创建/home/user/foo操作
+
+<ul>
+<li>绿色R代表获取读锁，红色W代表获取写锁</li>
+<li><img src="/images/blog_images/GFS_lock.png" alt="" /></li>
+<li>如图：当create操作获取/home/user的读锁时，只能等到其他操作释放掉写锁才能继续</li>
+<li>create操作不需要对父层目录（/home/user）加写锁,仅需要加读锁，防止该目录被删除即可</li>
+</ul>
+</li>
+<li>注意：为了避免死锁，加锁是先按照namespace tree的level顺序进行的，同level按照字典序</li>
+</ul>
+</li>
+<li><strong>Replica Placement</strong>
+
+<ul>
+<li>简介：处理chunk replica placement，从而保证scalability，reliability， and availability</li>
+<li>目的：最大化数据的可靠性和可用性，同时最大利用化带宽</li>
+<li>策略：不仅仅是跨机器，同时需要跨机架(racks)
+
+<ul>
+<li> 优点: 是充分保证了可靠性和可用性，同时读操作可以有效利用多机架的带宽资源</li>
+<li> 缺点: 是跨机架(racks)同样带来的弊端就是写操作时，数据流向不得不得跨机架</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Creation, Re-replication, Rebalancing</strong>
+
+<ul>
+<li>简介：chunk replicas 只在三种情况下被创建：chunk creation, re-replication, and rebalancing</li>
+<li>Creation（where to place the initially empty replicas）：
+
+<ol>
+<li>放在磁盘空间利用低于所有chunkservers均值的chunkserver上</li>
+<li>限制单个chunkserver最近创建数(如果数字过高，意味着chunkserver会迎来一波大量的写操作)</li>
+<li>跨机架(racks)存放</li>
+</ol>
+</li>
+<li>Re-replication:
+
+<ul>
+<li>when:  当可用的replicas数低于用户指定的数（默认为3）时
+
+<ul>
+<li>chunkservers unavailable</li>
+<li>chunkservers report its replica corrupted（disk fail，error&#8230;）</li>
+<li>用户指定的replicas数进行了提升</li>
+</ul>
+</li>
+<li>where: 同Creation（此处限制的是单个chunkserver当前active clone操作的数）</li>
+</ul>
+</li>
+<li>Rebalance：
+
+<ul>
+<li>对象：当前的replicas分配策略，以及移动已有的replicas</li>
+<li>目标:  获得较佳的磁盘使用率和负载均衡</li>
+<li>方式：定期的，缓慢进行（避免新的chunkserver一下负载大量写操作）</li>
+<li>策略：(选机器而不是选replica) 选择当前的磁盘剩余低于所有chunkservers均值的机器，对其replica进行move操作，从而均衡磁盘使用率</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Garbage colleciton</strong>
+
+<ul>
+<li>简介：GFS的文件删除是一种lazy的方式，依赖定期垃圾回收来回收磁盘物理空间，回收包括file级别和chunk级别</li>
+<li>机制：
+
+<ul>
+<li>对于要删除操作，修改文件名为隐藏的名字(hidden name,猜测就像linux带.前缀的文件名)，同时文件名带有删除时间戳</li>
+<li>定期扫描file namespace，发现如果这种文件存在超过指定时间(默认三天)则执行删除操作，同时删除其metadata</li>
+<li>定期扫描chunk namespace（<code>chunk 的 namespace是什么结构，有什么意义??</code>）
+
+<ul>
+<li>标记那些失效的chunk(对应的文件已不存在)，删除其metadata</li>
+<li>同时利用和chunkservers的HeartBeat传递的信息，chunkservers会报告其持有的chunk集合，对比，告知其持有的chunk那些需要删除</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>优点：
+
+<ul>
+<li>增强了系统的容错性，失败操作造成的一些垃圾chunk，会通过此机制回收</li>
+<li>回收操作整合进了master的后台操作和与chunkservers的handshakes中，回收动作得以批量进行，整体开销被分担</li>
+<li>这种延迟删除的机制，同时避免了偶然和不可逆的删除操作</li>
+</ul>
+</li>
+<li>缺点：
+
+<ul>
+<li>浪费了存储空间，用户无法通过删除操作来立即释放空间</li>
+<li>解决方法：
+
+<ul>
+<li>用户如果对于已经删除的文件再一次进行删除，系统将加快其回收的速度</li>
+<li>允许用户对不同的namespace制定不同的回收策略，以及复制策略（例如不进行备份/复制，其删除操作立即执行）</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Stale Replica Detection</strong>
+
+<ul>
+<li>定义：由于操作失败，或者chunkserver宕机造成chunk的修改没有被同步，形成了Stale Replica</li>
+<li>方案：
+
+<ul>
+<li>master持有chunk version number来区分某个chunk是否是旧的, 并通过垃圾回收机制来回收stale replica</li>
+<li>通过client的cache 超时时间以及重新打开文件来尽量限制client读取到过期数据（<code>文中区分了早期(premature)和过期(outdated)数据，某些业务场景读到premature数据应该是可以的</code>）</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<h4>系统交互</h4>
+
+<blockquote><p>系统的整体设计旨在降低master的参与度，毕竟它是整个分布式系统中唯一一个单点，很容易形成瓶颈</p></blockquote>
+
+<h5>租契(leases)和改动顺序(mutation order)</h5>
+
+<ul>
+<li><strong>背景</strong>：一条修改操作要在所有的chunk replicas上执行，我们使用租契(leases)来管理这个修改顺序</li>
+<li><strong>描述</strong>：
+
+<ul>
+<li>Master 向其中一个replicas发放租契(leases),该replica被称作 primary</li>
+<li>Primary 针对chunk的所有修改动作选择一系列的顺序</li>
+<li>当改动提交时，其他replicas依照primary的顺序进行</li>
+</ul>
+</li>
+<li><strong>目的</strong>：降低master的管理开销</li>
+<li><strong>细节</strong>：
+
+<ul>
+<li>Lease初始的超时时间为60s，超时则意味着当前lease失效，需要master重新下发</li>
+<li>如果Lease正在被执行，即chunk正在被执行改动，primary会通过和master交互来确保Lease的超时时间可以无限扩展</li>
+<li>上述中的交互是通过Master与chunkservers的HeartBeat捎带进行的</li>
+<li>同时，Master可以在Lease过期之前予以撤销（例如撤销重命名）</li>
+<li>即使Master和Primary的通讯断开了，在当前Lease过期前，他同样可以下发给其他replica一个新的Lease</li>
+<li>如果需要write的数据太大，或者跨越单个chunk，那么该操作会被client拆分成多个write操作；
+
+<ul>
+<li>由于有多个client存在，这些操作会按照相同的顺序进行，但是其中可能会穿插其他client的操作</li>
+<li>Shared file region 尾部可能包含来自多个client(<code>concurrent write</code>)的数据段(<code>比如clientA 向offset写入4个字节，clientB向ofset+2写入4个字节</code>)</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>示例</strong>：
+
+<ul>
+<li><img src="/images/blog_images/gfs00.jpg" alt="" />
+
+<ul>
+<li>1.client 询问Master对于指定chunk哪个chunkserver持有了当前的lease，同时询问其他replicas的位置；如果没有lease，那么master会选择一个replica，然后下发一个Lease</li>
+<li>2.Master告知client当前primary的标识以及其他replicas的位置(secondary)，client会把这些数据cache起来，直到primary不可达或者其不再持有lease</li>
+<li>3.client会把所有数据push到所有的replicas，chunkservers 会把这些数据存放在内部的LRU cache中，直到过期或者被使用</li>
+<li>4.当所有replicas都确认收到了client push的数据，client会向Primary发送write请求，Primary会先行执行操作，同时会为改动操作分配一个序列号</li>
+<li>5.Primary想所有的secondary replicas转发此次写请求，secondary按照primary分配的序列号依次执行</li>
+<li>6.当操作完成，Secondary会向Primary进行确认回复</li>
+<li>7.Primary向Client进行回复，如果执行过程中有任何错误，都会反馈给client。如果写入失败，client会选择重试3-7。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<h5>数据流</h5>
+
+<blockquote><p>系统把数据流从控制流中解耦出来，在Figure2中可以明显看出</p></blockquote>
+
+<ul>
+<li><strong>目标</strong>：
+
+<ul>
+<li>最大化单机带宽的使用
+
+<ul>
+<li>采用线性的方式来push数据，确保单机的出口带宽可以被充分利用，而不是向树状push时需要将出口带宽分给多个replicas (<code>并没有理解这样有什么高效，树状不也是充分利用了么？后续树状散射push出去貌似可以更高效？</code>)</li>
+</ul>
+</li>
+<li>避免网络瓶颈，和高延迟链接
+
+<ul>
+<li>每个机器都向离其最近的机器push数据</li>
+<li>distance 可以通过IP地址精确衡量（<code>内网IP吧，肯定是事先按照这种规则分配的IP</code>）</li>
+</ul>
+</li>
+<li>最小化延迟
+
+<ul>
+<li>利用TCP链接管道化数据传输，收到数据，立马向下转发，这依赖与全双工的链接（<code>结合这点，似乎能解释的通他比树状push数据高效了</code>）</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<h5>Atomic Record Appends</h5>
+
+<blockquote><p>传统的写入方式，如果client都指定在某个位置写入数据，那么并发写入同一region就不是序列化的，例如region结尾会包含来自多个client的数据段</p></blockquote>
+
+<ul>
+<li><strong>描述</strong>：GFS可以保证其追加操作至少有一次是原子性的(<code>at least once atomically</code>)，类似于没有竞争情况下的Unix O_APPEND
+
+<ul>
+<li>GFS里大量使用了append操作(特意如此设计，避免随机写)，如果按照传统的做法，client端需要额外的负载逻辑以及昂贵的同步机制（例如分布式锁）</li>
+<li>GFS系统中对这种并发写的的操作通常使用多生产者-单消费者模型或者多client归并结果进行处理</li>
+<li>record append操作和write一样，遵循Lease那套规则</li>
+</ul>
+</li>
+<li><strong>细节</strong>：
+
+<ul>
+<li>在执行append操作时，Primary会检查当前chunk(chunk固定最大64M)是否可以容纳这条记录
+
+<ul>
+<li>如果不能，先填充满，填充操作不能超过chunk大小的1/4，避免过多碎片（<code>猜测：如果超了就让client去拆成多条</code>）</li>
+<li>告知secondaries执行相同操作，同时告知client去下一个chunk重试该操作</li>
+<li>如果能容纳，按照Figure2中的处理逻辑处理即可</li>
+</ul>
+</li>
+<li>如果append失败：
+
+<ul>
+<li>replicas 相同的chunk上的数据就会不一致(有的成功，有的失败了)，replicas相互之间按字节不一致</li>
+<li>接下来的append操作需要在更高的offset上或者下一个chunk上去append即可</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<h5>Snapshot</h5>
+
+<blockquote><p>快照操作在保证最小化干扰当前的修改操作的情况下，利用copy-on-write瞬间完成对文件或文件夹的拷贝</p></blockquote>
+
+<ul>
+<li><strong>细节</strong>:
+
+<ul>
+<li>Master收到快照请求，会先撤销所涉及的chunk的所有未交付的Leases</li>
+<li>Master 将此操作写入磁盘日志</li>
+<li>创建一个新的快照文件，其metadata 拷贝自源文件的metadata, 源文件对应的chunk引用计数都加一</li>
+<li>如果引用计数大于1的chunk要client被修改，那么Master会推迟响应client，然后告知chunkserver拷贝当前chunk（<code>系统所处的磁盘速度3倍于其百兆网卡</code>）</li>
+<li>Master针对client的请求，对新拷贝的chunk执行Leases</li>
+</ul>
+</li>
+</ul>
+
+
+<h4>容错以及诊断</h4>
+
+<h5>高可用</h5>
+
+<blockquote><p>保证高可用的策略: faset recovery and replication</p></blockquote>
+
+<ul>
+<li><strong>Chunk</strong>
+
+<ul>
+<li>主要规则：
+
+<ul>
+<li>每个chunk都会在不同的chunkservers，不同的机架(racks)上进行备份</li>
+<li>用户可以指定不同namespace下的文件执行不同的备份级别</li>
+<li>备份损坏或者服务器下线后，master会再增加备份，以满足相应的备份级别</li>
+</ul>
+</li>
+<li>未来规划：
+
+<ul>
+<li>使用奇偶校验（partiy）</li>
+<li>使用纠删码（ensure codes）</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Master</strong>
+
+<ul>
+<li>Master通过备份来保证可靠性（<code>not availability，master始终是单点</code>）</li>
+<li>replication：
+
+<ul>
+<li>仅将operation log 和 checkpoints备份至多台机器</li>
+<li>只有operation log 被刷入磁盘，并同步至备份服务器后，mutation才被认为完成</li>
+<li>如果监测点发现Master不可用（机器宕机，磁盘挂了之类的），会将备份机启动为新的master，client通过dns规则可以快速对接到新的master上</li>
+</ul>
+</li>
+<li>shadow：（<code>区别于备份机</code>）
+
+<ul>
+<li>仅对外提供只读服务</li>
+<li>通过读取master备份机上的operation log来保持状态一致，同步master的决策（<code>仅能保证最终一致性</code>）</li>
+<li>chunk locations 也是在启东时通过询问chunkservers获取location信息，后续也会通过握手信息来监控其状态（相对Master而言频率较低）</li>
+<li>shadow 上的元数据信息会落后与master
+
+<h5>数据完整性</h5></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>由chunkservers端维护自己的数据校验
+
+<ul>
+<li>why?
+
+<ul>
+<li>通过和其他备份进行交叉校验开销太大</li>
+<li>备份直接数据并不完全一样，例如GFS允许append失败发生时，有脏数据存在，不保证字节一致</li>
+</ul>
+</li>
+<li>how?
+
+<ul>
+<li>chunk被分为64KB大小的blocks，每个block有32bit的校验码</li>
+<li>校验码存放在内存中，并且持久化在日志里，和用户数据分离</li>
+<li>对于来自client或者其他chunkservers的读取操作：
+
+<ul>
+<li>在返回数据前进行完整性校验，以保证损坏的数据不会传播</li>
+<li>如果校验结果失败
+
+<ul>
+<li>返回错误码，并向master上报，master会令请求方去其他备份读取数据</li>
+<li>同时master会从其他备份拷贝当前chunk(<code>没有说是master让当前chunkservers去恢复，那文中提到read from another chunkserver是什么场景？</code>)</li>
+<li>当新的合法数据就位（<code>master并不一定把数据恢复到当前机器上，也有可能是在另外某台机器上新建了一份备份</code>），master会下令当前chunkservers删除其备份</li>
+</ul>
+</li>
+<li>数据校验并不会对读取性能有很大影响，因为：
+
+<ul>
+<li>大部分读取只会跨越很少的blocks，需要校验的数据非常少</li>
+<li>读取一方，尽量去对齐（align）读取数据的checksum block的边界来降低chunkservers数据校验成本（<code>对齐就优化了？意思是说每次尽量读整个block？关键每次写入也不一定写入一个完整的block？怎么生出校验码？</code>）</li>
+<li>校验码的查找和数据校验的工作并不会产生磁盘IO，所以这个动作可以和磁盘IO重叠进行</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>校验码的计算在写入操作（append）进行的深度优化
+
+<ul>
+<li>仅仅增量的去更新最后一部分的checksum block的校验码， 计算通过append新添加的新的 checksum blocks的校验码（<code>这里的checksum block 是个什么概念？</code>）</li>
+<li>即使最后一段的checksum block 已经损坏，而且我们没有检测到；新的checksum值也不会匹配存储的数据，在block下一次被读取时就会被检测到</li>
+</ul>
+</li>
+<li>对于已经存在的chunk进行overwrite：
+
+<ul>
+<li>我们必须读取并且验证被覆盖区域的第一个和最后一个block，然后执行写入操作</li>
+<li>否则，新的checksum就会隐藏其他没有被overwriten的区域的损坏数据</li>
+</ul>
+</li>
+<li>chunkservers在空闲时间会扫描验证不活跃的chunks，以此来对鲜有读取的损坏数据进行发现，master会重建备份（<code>通过这一点保证GFS的备份级别是准确的，而不是自以为是的</code>）</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<h5>诊断工具</h5>
+
+<ul>
+<li>通过广泛且详细的诊断日志，以微小的开销来来协助完不可测量（immeasurably）问题的隔离，调试，性能分析
+
+<ul>
+<li>记录特定的事件（例如chunkservers 上线或者宕机）（<code>所以，究竟由谁来记录诊断日志？猜测是所有的角色都参与</code>）</li>
+<li>记录所有的RPC请求以及回复</li>
+</ul>
+</li>
+</ul>
+
+
+<h3>经验总结</h3>
+
+<h5>业务</h5>
+
+<ul>
+<li>最初设想GFS只应用与产品环境，结果后来承担了科研和开发任务。因此例如权限，配额等功能被引入了进来</li>
+</ul>
+
+
+<h5>实现</h5>
+
+<ul>
+<li>GFS是依赖与linux 磁盘驱动，因为IDE接口协议版本不匹配有可能会造成数据损坏，也正是因为这一点促使了checksums机制的使用，同时开发团队也修改了kernel来处理这种协议不匹配</li>
+<li>linux 2.2 kenel中的fsync() 的开销是跟文件大小成比例的，而不是和被修改的局部大小。这影响了size较大的operation log的写性能，尤其是checkpoint实现之前。后来的解决方案是使用同步写来完成这个操作，最终迁移到了linux 2.4</li>
+<li>涉及读写锁，mmap，当磁盘线程正在page之前的映射的数据时，锁会阻塞网络线程把数据映射进内存；最终把mmap()缓冲了pread()(<code>不是很懂</code>)</li>
+</ul>
+
+
+<h3>参考</h3>
+
+<p><a href="http://static.googleusercontent.com/media/research.google.com/en//archive/gfs-sosp2003.pdf">Google File System</a></p>
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-07-08T15:47:00+08:00" pubdate data-updated="true">Jul 8<span>th</span>, 2016</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2016/07/08/google-file-system-summary/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2016/06/27/ieee-floating-point-summary/">
+		
+			浮点数问题探究</a>
+	</h2>
+	<div class="entry-content">
+		<h3>问题</h3>
+
+<p>最近在使用openresty实现一些业务，业务中设计了一套二进制编码，目前为49bit。真正实现的时候发现lua里不支持(u)int64, 只有double，同时<a href="http://bitop.luajit.org/api.html">bitops</a>也只支持32位。没有多想，直接用double存储了编码的10进制，然后开始关注如何去支持位运算。
+结果可想而知：</p>
+
+<h5>C-module for lua</h5>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="c1">// bitop.c</span>
+</span><span class='line'><span class="cp">#include &lt;inttypes.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;lua.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;lauxlib.h&gt;</span>
+</span><span class='line'><span class="cp">#include &lt;lualib.h&gt;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="nf">tostring</span><span class="p">(</span><span class="n">lua_State</span><span class="o">*</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">n</span> <span class="o">=</span> <span class="n">lua_gettop</span><span class="p">(</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="kt">uint64_t</span> <span class="n">a</span> <span class="o">=</span> <span class="n">lua_tonumber</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>        <span class="kt">uint64_t</span> <span class="n">b</span> <span class="o">=</span> <span class="n">lua_tonumber</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>
+</span><span class='line'>        <span class="c1">//printf(&quot;%&quot;PRIu64&quot; %&quot;PRIu64&quot;\n&quot;, a, b);</span>
+</span><span class='line'>        <span class="c1">//printf(&quot;%&quot;PRIX64&quot; %&quot;PRIX64&quot;\n&quot;, a, b);</span>
+</span><span class='line'>        <span class="kt">char</span> <span class="n">str</span><span class="p">[</span><span class="mi">65</span><span class="p">];</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="mi">16</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="n">sprintf</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="s">&quot;%&quot;</span><span class="n">PRIx64</span><span class="p">,</span> <span class="n">a</span><span class="p">);</span>
+</span><span class='line'>            <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="mi">10</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="n">sprintf</span><span class="p">(</span><span class="n">str</span><span class="p">,</span> <span class="s">&quot;%&quot;</span><span class="n">PRIu64</span><span class="p">,</span> <span class="n">a</span><span class="p">);</span>
+</span><span class='line'>            <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">b</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="kt">uint64_t</span> <span class="n">mask</span> <span class="o">=</span> <span class="mh">0x8000000000000000ULL</span><span class="p">;</span>
+</span><span class='line'>            <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>            <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="mi">64</span><span class="p">;</span> <span class="o">++</span><span class="n">j</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                    <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;1&#39;</span><span class="p">;</span>
+</span><span class='line'>                <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>                    <span class="k">if</span> <span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                        <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+</span><span class='line'>                    <span class="p">}</span>
+</span><span class='line'>                <span class="p">}</span>
+</span><span class='line'>                <span class="n">a</span> <span class="o">=</span> <span class="n">a</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>            <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="o">++</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;0&#39;</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>            <span class="n">str</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+</span><span class='line'>            <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">str</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="k">const</span> <span class="n">luaL_Reg</span> <span class="n">lib</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// {&quot;lshift&quot;, lshift},</span>
+</span><span class='line'>    <span class="c1">// {&quot;rshift&quot;, rshift},</span>
+</span><span class='line'>    <span class="c1">// {&quot;band&quot;, band},</span>
+</span><span class='line'>    <span class="c1">// {&quot;bor&quot;, bor},</span>
+</span><span class='line'>    <span class="p">{</span><span class="s">&quot;tostring&quot;</span><span class="p">,</span> <span class="n">tostring</span><span class="p">},</span>
+</span><span class='line'>    <span class="p">{</span><span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">}</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="kt">int</span> <span class="nf">luaopen_bitop</span><span class="p">(</span><span class="n">lua_State</span><span class="o">*</span> <span class="n">l</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="n">luaL_register</span><span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="s">&quot;bitop&quot;</span><span class="p">,</span> <span class="n">lib</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="c1">// gcc bitop.c -std=c99 -I/usr/local/luajit/include/luajit-2.1 -fPIC -shared -o bitop.so</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>简单测试下：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='lua'><span class='line'><span class="c1">-- test.lua</span>
+</span><span class='line'><span class="kd">local</span> <span class="n">bit</span> <span class="o">=</span> <span class="nb">require</span> <span class="s2">&quot;</span><span class="s">bitop&quot;</span>
+</span><span class='line'><span class="kd">local</span> <span class="n">a</span> <span class="o">=</span> <span class="n">bit</span><span class="p">.</span><span class="n">lshift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">2^63 in dec : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mi">2</span><span class="o">^</span><span class="mi">63</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">2^63 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mi">2</span><span class="o">^</span><span class="mi">63</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">2^64 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mi">2</span><span class="o">^</span><span class="mi">64</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFF in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFF</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFF000 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFF000</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFF000 in dec : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFF000</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFF000 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFF000</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFFF00 in bin : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFFF00 in dec : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFFFFFFFFFFFFF00 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0000FFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0000FFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x000FFFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x000FFFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x00FFFFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x00FFFFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0FFFFFFFFFFFFFFF in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0FFFFFFFFFFFFFFF</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0FFFFFFFFFFFFF00 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0FFFFFFFFFFFFF00</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0x0FFFFFFFFFFFFFF0 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0x0FFFFFFFFFFFFFF0</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span><span class='line'><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">0xFFF0FFFFFFFFFF00 in hex : &#39;</span><span class="p">,</span> <span class="n">bit</span><span class="p">.</span><span class="n">tostring</span><span class="p">(</span><span class="mh">0xFFF0FFFFFFFFFF00</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='lua'><span class='line'><span class="mi">2</span><span class="o">^</span><span class="mi">63</span> <span class="k">in</span> <span class="n">dec</span> <span class="p">:</span>     <span class="mi">9223372036854775808</span>
+</span><span class='line'><span class="mi">2</span><span class="o">^</span><span class="mi">63</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>     <span class="mi">1000000000000000000000000000000000000000000000000000000000000000</span>
+</span><span class='line'><span class="mi">2</span><span class="o">^</span><span class="mi">64</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>     <span class="mi">0</span>
+</span><span class='line'><span class="mh">0xFFFF</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>  <span class="mi">1111111111111111</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFF000</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>  <span class="mi">1111111111111111111111111111111111111111111111111111000000000000</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFF000</span> <span class="k">in</span> <span class="n">dec</span> <span class="p">:</span>  <span class="mi">18446744073709547520</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFF000</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fffffffffffff000</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">bin</span> <span class="p">:</span>  <span class="mi">0</span>                              <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">dec</span> <span class="p">:</span>  <span class="mi">0</span>                              <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0xFFFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">0</span>                              <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0x0000FFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">ffffffffffff</span>
+</span><span class='line'><span class="mh">0x000FFFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fffffffffffff</span>
+</span><span class='line'><span class="mh">0x00FFFFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">100000000000000</span>                <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0x0FFFFFFFFFFFFFFF</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">1000000000000000</span>               <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0x0FFFFFFFFFFFFF00</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fffffffffffff00</span>
+</span><span class='line'><span class="mh">0x0FFFFFFFFFFFFFF0</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="mi">1000000000000000</span>               <span class="c1">-- ？？</span>
+</span><span class='line'><span class="mh">0xFFF0FFFFFFFFFF00</span> <span class="k">in</span> <span class="n">hex</span> <span class="p">:</span>  <span class="n">fff1000000000000</span>               <span class="c1">-- ？？</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>很明显是发生了溢出，但是却没有明显规律，毕竟2<sup>63</sup> 没有溢出，但是为什么比他小的却溢出了。</p>
+
+<p>之前啃<a href="https://book.douban.com/subject/1230413/">CSAPP</a>时看到过浮点数的binary形式（<a href="https://en.wikipedia.org/wiki/IEEE_floating_point">IEEE 754</a>）和整型是完全不一样的，猜测肯定是lua中int64&#8212;>double有溢出/精度丢失，具体什么情况下会触发必须搞清楚，不然这套编码方案就成了纸上谈兵了。</p>
+
+<h3>IEEE 754</h3>
+
+<p>回去翻<a href="https://book.douban.com/subject/1230413/">CSAPP</a>，结合网上一些讲解，简单总结下IEEE 754里面的一些关键点</p>
+
+<p>根据<a href="https://en.wikipedia.org/wiki/IEEE_floating_point">IEEE 754</a>的规定，浮点数二进制计算公式为：V = (-1)<sup>S</sup> * M * 2<sup>E</sup></p>
+
+<p>二进制格式表示如下：</p>
+
+<p><img src="/images/blog_images/float.png" alt="" /></p>
+
+<p>其中:</p>
+
+<ul>
+<li><strong>Sign(s) </strong>:  用于决定这个数是正数(s=0)还是负数(s=1)</li>
+<li><strong>Exponent(exp)</strong>:  exp = ek-1···e1e0 （二进制表示）是一个无符号数，用于编码E
+
+<ul>
+<li>E = exp-Bias，用于对浮点数加权</li>
+<li>Bias = 2<sup>(k-1)</sup> -1</li>
+</ul>
+</li>
+<li><strong>Fraction(frac)</strong>:  n位小数字段frac = fn-1···f1f0（二进制表示）, 用于编码尾数M, 范围是1~2-ε或0~1-ε
+同时：</li>
+<li><strong>单精度(float)</strong>: K = 8, N = 23</li>
+<li><strong>双精度(double)</strong>: K = 11, N = 52</li>
+</ul>
+
+
+<p>根据exp的值，有三种不同情况的编码，用以覆盖所以情况，如下：
+<img src="/images/blog_images/float1.png" alt="" /></p>
+
+<ul>
+<li><strong>规格化的</strong>：
+
+<ul>
+<li>此时M的范围为1~2-ε，M = 1. fn-1fn-2···f1f0 (此为二进制表示，隐含的以1开头的 )</li>
+</ul>
+</li>
+<li><strong>非规格化的</strong>：
+
+<ul>
+<li>E = 1 - Bias</li>
+<li>M的范围为0~1-ε，M =  0. fn-1fn-2···f1f0</li>
+<li>为什么需要非规格化，因为规格化的表示法无法表示0</li>
+</ul>
+</li>
+<li><strong>特殊值</strong>：
+
+<ul>
+<li>可表示正无穷，负无穷，用以表示大数相乘，或者除以零时的溢出结果</li>
+<li>NaN 用于表示非实数，或者无穷</li>
+</ul>
+</li>
+</ul>
+
+
+<p>举个例子，将如下单精度二进制表示形式转换为浮点数表示：
+<img src="/images/blog_images/float2.png" alt="" /></p>
+
+<ol>
+<li>因为M是隐含的以1开头的，我们在小数点前补1，小数点后按frac来排放，则M = 1.1111111(二进制)</li>
+<li>exp = 10000110(二进制) = 134</li>
+<li>E = exp - Bias = 134 - （2<sup>7</sup> - 1）= 134-127 = 7</li>
+<li>V = 1 * 1.1111111(二进制) * 2<sup>7</sup> = 11111111（二进制）= 511</li>
+</ol>
+
+
+<p>511逆向转为float：</p>
+
+<ol>
+<li>511 = 2<sup>9</sup> - 1 = 11111111(二进制) = 1.1111111(二进制) * 2<sup>7</sup></li>
+<li>因为规格化的浮点数M的取值范围为1~2-ε，则可以把511转换为1.1111111(二进制) * 2<sup>7</sup></li>
+<li>则M = 1.1111111(二进制)</li>
+<li>因为M是隐含的以1开头的，开头的1不需要存储，所以 f = 11111110000000000000000(二进制)， 填充进frac</li>
+<li>E = exp-Bias = exp - (2<sup>7</sup> - 1) = 7, 所以exp = 7 + 127 = 134 = 10000110(二进制)， 填充进exp</li>
+<li>511为正数，所以s位置为0</li>
+</ol>
+
+
+<p>511逆向转为double：</p>
+
+<ol>
+<li>511 = 1.1111111(二进制) * 2<sup>7</sup></li>
+<li>与float相同，M =  1.1111111(二进制)</li>
+<li>所以 f = 11111110000000000000000000000&#8230;000(53位二进制)， 填充进frac</li>
+<li>E = exp-Bias = exp - (2<sup>10</sup> - 1) = 7, 所以exp = 7 + 1023 = 1030 = 10000000110(二进制)， 填充进exp</li>
+<li>正数，是位置为0</li>
+</ol>
+
+
+<h3>问题探究</h3>
+
+<p>那么文章开头我们的问题，double类型究竟可以表示多大的整数，以及为什么？</p>
+
+<p>根据上文的IEEE754标准，以及我们针对511的正反转换举例，可以看到，其实不管是浮点数还是整数其二进制形式其实都是存放在了frac中：</p>
+
+<ol>
+<li>针对double，直观上看上最大可存放n+1 = 53位（加1是因为M是隐含的以1开头的，小数点前的1无需存储），即最大2<sup>53-1</sup></li>
+<li>必须提到的一点是如果frac中存放不下的时候，低位会被舍弃，浮点数也会因此出现精度丢失，如果是整数则意味着被截断了</li>
+<li>根据2我们可以看出来，如果是低位为0，被舍弃其实是不受影响的，所以2<sup>53也是可以在double里正确表示的</sup></li>
+<li>同理2<sup>63也是可以表示的</sup> &#8212;&#8212;- 这解释了我们文章开头问题中溢出没有规律的问题</li>
+<li>而且2<sup>53</sup> + 2 也是可以表示的</li>
+<li>以此类推</li>
+</ol>
+
+
+<p>所以，只能说double可以连续表达的最大的整数上限是2<sup>53</sup></p>
+
+<h3>延伸阅读</h3>
+
+<p><a href="http://cenalulu.github.io/linux/about-denormalized-float-number/">你应该知道的浮点数基础知识</a></p>
+
+<blockquote><p>我也是看了里面的举例，结合CSAPP才弄清楚浮点数的，里面的st上的那个问题非常有意思，但是文章后面的关于为何会有非规格化浮点数的原因不太苟同：
+“不难看出浮点数的精度和指数范围有很大关系。最低不能低过2<sup>-7</sup> - 1最高不能高过2<sup>8</sup> - 1（其中剔除了指数部分全0和全1的特殊情况）”</p></blockquote>
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-06-27T15:35:00+08:00" pubdate data-updated="true">Jun 27<span>th</span>, 2016</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2016/06/27/ieee-floating-point-summary/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2016/05/05/linux-cpu-load/">
+		
+			Linux Cpu Load</a>
+	</h2>
+	<div class="entry-content">
+		<h4>简析</h4>
+
+<p>工作一直是在linux环境下，经常通过top，uptime来查看当前机器的负载（load average）, 但是始终对这个概念比较模糊，无法描述清楚这个值所反馈的真实含义，抽时间读了网上的一些文章，简单做下笔记：</p>
+
+<ul>
+<li><strong>introduction</strong> ：例如 load average: 0.03, 0.05, 0.06 后面三个数字代表了过去1分钟，5分钟，15分钟的CPU平均负载；</li>
+<li><strong>Threshold</strong> ：如果当前机器是一个N核CPU（grep &#8216;model name&#8217; /proc/cpuinfo | wc -l），则load average的上限就是N，具体如下：
+
+<ul>
+<li>预警：0.7*N</li>
+<li>上限：1.0*N</li>
+<li>WTF：5.0*N</li>
+</ul>
+</li>
+<li><strong>tips</strong> ：
+
+<ul>
+<li>1分钟，5分钟，15分钟三个参考数据，着重参考后两者即可，1分钟内如果超过1.0*N，并无大碍
+
+<blockquote><p>以上来自互联网前辈们工程实践的总结</p></blockquote></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>原理</h4>
+
+<p>尝试看下kernel里是怎么计算load值的：</p>
+
+<p><strong>定时计算</strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="c1">// linux-2.6.32.68/kernel/timer.c</span>
+</span><span class='line'><span class="c1">// jiffies记录了电脑开机到现在总共的时钟中断次数</span>
+</span><span class='line'><span class="c1">// 如果系统的时钟频率是1000（由宏HZ设置），即1秒中断1000次，每1ms中断一次</span>
+</span><span class='line'><span class="c1">// 我们暂时不管ticks到底是代表了几次中断，总之每个ticks周期，都会调用load的计算函数</span>
+</span><span class='line'><span class="kt">void</span> <span class="n">do_timer</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">ticks</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">jiffies_64</span> <span class="o">+=</span> <span class="n">ticks</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">update_wall_time</span><span class="p">();</span>
+</span><span class='line'>    <span class="n">calc_global_load</span><span class="p">();</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="c1">// linux-2.6.32.68/kernel/sched.h</span>
+</span><span class='line'><span class="cm">/*</span>
+</span><span class='line'><span class="cm"> * These are the constant used to fake the fixed-point load-average</span>
+</span><span class='line'><span class="cm"> * counting. Some notes:</span>
+</span><span class='line'><span class="cm"> *  - 11 bit fractions expand to 22 bits by the multiplies: this gives</span>
+</span><span class='line'><span class="cm"> *    a load-average precision of 10 bits integer + 11 bits fractional</span>
+</span><span class='line'><span class="cm"> *  - if you want to count load-averages more often, you need more</span>
+</span><span class='line'><span class="cm"> *    precision, or rounding will get you. With 2-second counting freq,</span>
+</span><span class='line'><span class="cm"> *    the EXP_n values would be 1981, 2034 and 2043 if still using only</span>
+</span><span class='line'><span class="cm"> *    11 bit fractions.</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="c1">// 上述大意，是采用了10 bit整数 + 11 bits的分数的fixed-point形式来表示，并非通常的float-point</span>
+</span><span class='line'><span class="cp">#define FSHIFT      11      </span><span class="cm">/* nr of bits of precision */</span><span class="cp"></span>
+</span><span class='line'><span class="cp">#define FIXED_1     (1&lt;&lt;FSHIFT) </span><span class="cm">/* 1.0 as fixed-point */</span><span class="cp"></span>
+</span><span class='line'><span class="cp">#define LOAD_FREQ   (5*HZ+1)    </span><span class="cm">/* 5 sec intervals */</span><span class="cp"></span>
+</span><span class='line'><span class="cp">#define EXP_1       1884        </span><span class="cm">/* 1/exp(5sec/1min) as fixed-point */</span><span class="cp"></span>
+</span><span class='line'><span class="cp">#define EXP_5       2014        </span><span class="cm">/* 1/exp(5sec/5min) */</span><span class="cp"></span>
+</span><span class='line'><span class="cp">#define EXP_15      2037        </span><span class="cm">/* 1/exp(5sec/15min) */</span><span class="cp"></span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// linux-2.6.32.68/kernel/sched.c</span>
+</span><span class='line'><span class="kt">void</span> <span class="n">calc_global_load</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">upd</span> <span class="o">=</span> <span class="n">calc_load_update</span> <span class="o">+</span> <span class="mi">10</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">long</span> <span class="n">active</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// 如果 jiffies 小于 upd，直接return</span>
+</span><span class='line'>    <span class="c1">// 当前距离上次计算超过5 second + 10个ticks（如果HZ == 1000，即10ms）则触发计算</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">time_before</span><span class="p">(</span><span class="n">jiffies</span><span class="p">,</span> <span class="n">upd</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">active</span> <span class="o">=</span> <span class="n">atomic_long_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">calc_load_tasks</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">active</span> <span class="o">=</span> <span class="n">active</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">active</span> <span class="o">*</span> <span class="n">FIXED_1</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// 直观上看，这三次计算分别对应的应该是1分钟，5分钟，15分钟三个load值</span>
+</span><span class='line'>    <span class="n">avenrun</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">calc_load</span><span class="p">(</span><span class="n">avenrun</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">EXP_1</span><span class="p">,</span> <span class="n">active</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">avenrun</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">calc_load</span><span class="p">(</span><span class="n">avenrun</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">EXP_5</span><span class="p">,</span> <span class="n">active</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">avenrun</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">calc_load</span><span class="p">(</span><span class="n">avenrun</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">EXP_15</span><span class="p">,</span> <span class="n">active</span><span class="p">);</span>
+</span><span class='line'>    <span class="c1">// 计算完成后更新 cal_load_update</span>
+</span><span class='line'>    <span class="c1">// LOAD_FREQ = 5HZ + 1  即约等于 5 seconds</span>
+</span><span class='line'>    <span class="c1">// 其实cal_load_update指定了下次计算的时间点</span>
+</span><span class='line'>    <span class="n">calc_load_update</span> <span class="o">+=</span> <span class="n">LOAD_FREQ</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">unsigned</span> <span class="kt">long</span>
+</span><span class='line'><span class="n">calc_load</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">load</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">exp</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">active</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">load</span> <span class="o">*=</span> <span class="n">exp</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">load</span> <span class="o">+=</span> <span class="n">active</span> <span class="o">*</span> <span class="p">(</span><span class="n">FIXED_1</span> <span class="o">-</span> <span class="n">exp</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">load</span> <span class="o">&gt;&gt;</span> <span class="n">FSHIFT</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>截至目前，我只知道了计算间隔约5秒钟
+没看懂EXP_1，EXP_5, EXP_15，FSHIFT这几个magic number，冥冥中感觉前三个应该跟1分钟，5分钟，15分钟有关
+active代表的又是什么？感觉像是指的active状态的task数量（最近刚读完<a href="http://pages.cs.wisc.edu/~remzi/OSTEP/#book-chapters">《Operating Systems: Three Easy Pieces》</a>）</p>
+
+<p>追溯下 calc_load_task变量：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="c1">// linux-2.6.32.68/kernel/sched.c</span>
+</span><span class='line'><span class="c1">// 发现针对calc_load_task的删除操作</span>
+</span><span class='line'><span class="cm">/*</span>
+</span><span class='line'><span class="cm"> * remove the tasks which were accounted by rq from calc_load_tasks.</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="n">calc_global_load_remove</span><span class="p">(</span><span class="k">struct</span> <span class="n">rq</span> <span class="o">*</span><span class="n">rq</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">atomic_long_sub</span><span class="p">(</span><span class="n">rq</span><span class="o">-&gt;</span><span class="n">calc_load_active</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">calc_load_tasks</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">rq</span><span class="o">-&gt;</span><span class="n">calc_load_active</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="c1">// 发现针对calc_load_task的添加操作</span>
+</span><span class='line'><span class="cm">/*      </span>
+</span><span class='line'><span class="cm"> * Either called from update_cpu_load() or from a cpu going idle</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="c1">// 更新calc_load_tasks动作，是在load的计算之后进行的</span>
+</span><span class='line'><span class="c1">// do_timer()被调用之后又调用的update_process_times() -&gt; calc_load_account_active() -&gt; update_cpu_load() -&gt; calc_load_account_active（）</span>
+</span><span class='line'><span class="c1">// 但是calc_load_account_active（）也是每隔LOAD_FREQ执行一次，avg_load计算的是前一个LOAD_FREQ周期的数据，计算完了，然后calc_load_task再被更新   </span>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="n">calc_load_account_active</span><span class="p">(</span><span class="k">struct</span> <span class="n">rq</span> <span class="o">*</span><span class="n">this_rq</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">long</span> <span class="n">nr_active</span><span class="p">,</span> <span class="n">delta</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// 结合rq定义看，所谓 active 就是R，D类型的进程数</span>
+</span><span class='line'>    <span class="n">nr_active</span> <span class="o">=</span> <span class="n">this_rq</span><span class="o">-&gt;</span><span class="n">nr_running</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">nr_active</span> <span class="o">+=</span> <span class="p">(</span><span class="kt">long</span><span class="p">)</span> <span class="n">this_rq</span><span class="o">-&gt;</span><span class="n">nr_uninterruptible</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// 如果一个LOAD_FREQ周期内，nr_active数量有发生变化，则计算delta</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">nr_active</span> <span class="o">!=</span> <span class="n">this_rq</span><span class="o">-&gt;</span><span class="n">calc_load_active</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="c1">// delta 是指当前一个LOAD_FREQ周期新增的R,D进程数</span>
+</span><span class='line'>        <span class="n">delta</span> <span class="o">=</span> <span class="n">nr_active</span> <span class="o">-</span> <span class="n">this_rq</span><span class="o">-&gt;</span><span class="n">calc_load_active</span><span class="p">;</span>
+</span><span class='line'>        <span class="n">this_rq</span><span class="o">-&gt;</span><span class="n">calc_load_active</span> <span class="o">=</span> <span class="n">nr_active</span><span class="p">;</span>
+</span><span class='line'>        <span class="c1">// 疑问：既然每次都加delta，calc_load_tasks 其实就等于nr_active嘛，直接atomic_long_set不就完了？？</span>
+</span><span class='line'>        <span class="n">atomic_long_add</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">calc_load_tasks</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="c1">// 查看 rq的定义: per-CPU runqueue data structure</span>
+</span><span class='line'><span class="cm">/*</span>
+</span><span class='line'><span class="cm"> * This is the main, per-CPU runqueue data structure.</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * Locking rule: those places that want to lock multiple runqueues</span>
+</span><span class='line'><span class="cm"> * (such as the load balancing or the thread migration code), lock</span>
+</span><span class='line'><span class="cm"> * acquire operations must be ordered by ascending &amp;runqueue.</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="k">struct</span> <span class="n">rq</span> <span class="p">{</span>
+</span><span class='line'>    <span class="p">...</span>
+</span><span class='line'>    <span class="cm">/*</span>
+</span><span class='line'><span class="cm">     * nr_running and cpu_load should be in the same cacheline because</span>
+</span><span class='line'><span class="cm">     * remote CPUs use both these fields when doing load calculation.</span>
+</span><span class='line'><span class="cm">     */</span>
+</span><span class='line'>    <span class="c1">// 可运行的进程数量（进程状态以及含义可以自行google）-----状态码 R (TASK_RUNNING)</span>
+</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">nr_running</span><span class="p">;</span>    <span class="c1">// kernel里的number类型都以nr作为前缀</span>
+</span><span class='line'>    <span class="p">...</span>
+</span><span class='line'>    <span class="cm">/*</span>
+</span><span class='line'><span class="cm">     * This is part of a global counter where only the total sum</span>
+</span><span class='line'><span class="cm">     * over all CPUs matters. A task can increase this counter on</span>
+</span><span class='line'><span class="cm">     * one CPU and if it got migrated afterwards it may decrease</span>
+</span><span class='line'><span class="cm">     * it on another CPU. Always updated under the runqueue lock:</span>
+</span><span class='line'><span class="cm">     */</span>
+</span><span class='line'>    <span class="c1">// 不可中断睡眠状态进程数-----状态码 D (TASK_UNINTERRUPTIBLE)</span>
+</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">nr_uninterruptible</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">...</span>
+</span><span class='line'>    <span class="cm">/* calc_load related fields */</span>
+</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">calc_load_update</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">long</span> <span class="n">calc_load_active</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>再尝试看下avenrun数组内的数据都在哪里被使用了，最终是怎么输出到/proc/loadavg（uptime，top里的load数据都源于此文件）</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="c1">// linux-2.6.32.68/kernel/sched.c</span>
+</span><span class='line'><span class="cm">/**</span>
+</span><span class='line'><span class="cm"> * get_avenrun - get the load average array</span>
+</span><span class='line'><span class="cm"> * @loads:  pointer to dest load array</span>
+</span><span class='line'><span class="cm"> * @offset: offset to add</span>
+</span><span class='line'><span class="cm"> * @shift:  shift count to shift the result left</span>
+</span><span class='line'><span class="cm"> *</span>
+</span><span class='line'><span class="cm"> * These values are estimates at best, so no need for locking.</span>
+</span><span class='line'><span class="cm"> */</span>
+</span><span class='line'><span class="kt">void</span> <span class="n">get_avenrun</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="o">*</span><span class="n">loads</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">offset</span><span class="p">,</span> <span class="kt">int</span> <span class="n">shift</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">loads</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">avenrun</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">offset</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">shift</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">loads</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">avenrun</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">offset</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">shift</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">loads</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">avenrun</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">offset</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">shift</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// linux-2.6.32.68/fs/proc/loadavg.c</span>
+</span><span class='line'><span class="c1">// 从这两个宏可以看出，avnrun内元素，低11位为分数,高位是10进制的整数</span>
+</span><span class='line'><span class="c1">// 其实之前FSHIFT处的注释就说过了&#39;fixed-point&#39; &amp;&amp; &#39;10 bits integer + 11 bits fractional&#39;</span>
+</span><span class='line'><span class="cp">#define LOAD_INT(x) ((x) &gt;&gt; FSHIFT)</span>
+</span><span class='line'><span class="cp">#define LOAD_FRAC(x) LOAD_INT(((x) &amp; (FIXED_1-1)) * 100)</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">int</span> <span class="n">loadavg_proc_show</span><span class="p">(</span><span class="k">struct</span> <span class="n">seq_file</span> <span class="o">*</span><span class="n">m</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">v</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">avnrun</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">get_avenrun</span><span class="p">(</span><span class="n">avnrun</span><span class="p">,</span> <span class="n">FIXED_1</span><span class="o">/</span><span class="mi">200</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// 看输出格式，应该就是/proc/loadavg内的数据无疑</span>
+</span><span class='line'>    <span class="n">seq_printf</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s">&quot;%lu.%02lu %lu.%02lu %lu.%02lu %ld/%d %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="n">LOAD_INT</span><span class="p">(</span><span class="n">avnrun</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">LOAD_FRAC</span><span class="p">(</span><span class="n">avnrun</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+</span><span class='line'>        <span class="n">LOAD_INT</span><span class="p">(</span><span class="n">avnrun</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">LOAD_FRAC</span><span class="p">(</span><span class="n">avnrun</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+</span><span class='line'>        <span class="n">LOAD_INT</span><span class="p">(</span><span class="n">avnrun</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">LOAD_FRAC</span><span class="p">(</span><span class="n">avnrun</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
+</span><span class='line'>        <span class="n">nr_running</span><span class="p">(),</span> <span class="n">nr_threads</span><span class="p">,</span>
+</span><span class='line'>        <span class="n">task_active_pid_ns</span><span class="p">(</span><span class="n">current</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">last_pid</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>以上，我们知道了load计算其实只是利用了cpu 当前的R，D状态的进程数，仍旧未解的问题：</p>
+
+<blockquote><ol>
+<li>calc_load_tasks 存放的竟然是当前的R,D状态的进程数，更新周期为LOAD_FREQ，那究竟是如何计算出过去1,5,15分钟的平均load的，load的计算具体公式是什么？</li>
+<li>具体的那几个magic number到底什么含义？</li>
+</ol>
+</blockquote>
+
+<p>通过kernel代码里calc_load()的实现，可以看到在计算当前load的时候，变量只有active，公式 ：</p>
+
+<pre><code>load(N) = (load(N-1)*EXP + active*(2^11 - EXP) )/ 2^11
+</code></pre>
+
+<p>很明显这不是朴素的平均数计算方法，奈何统计学学的实在不咋滴，思考良久依旧不知所以。</p>
+
+<p>回想下朴素的计算方式，考虑目前我们可以做到5秒统计一次当前的active tasks数量，那么如果是我自己来实现，统计过去1分钟的平均值，我会进行如下设计：
+<img src="/images/blog_images/cpu_load.png" alt="" /></p>
+
+<p>用长度12（60 s / 5s = 12）的链表来存储，每个周期（5s）,会在首部添加一个节点，记录当前的active tasks数量，并删除尾端的节点；整个链表则可以随时用来计算过去的1分钟，active tasks的平均数量，即avg_load = count(list_node)/12
+但是，每次更新都有一次插入，一次删除，而且需要进行加锁操作，在kernel里这样实现应该不是一个好的方案，另外还需要了解的一点就是处于性能的考虑kernel里不支持浮点数操作</p>
+
+<p>最后不断google，发现了<a href="http://www.teamquest.com/files/9214/2049/9761/ldavg1.pdf">《UNIX Load Average Part 1》</a> , 同样是解析load，写的比我详细，并且对magic number做了详细解释，文中指出此处计算的是 <strong><em>exponentially-damped moving averages</em></strong>，这也只是<a href="https://en.wikipedia.org/wiki/Moving_average">moving averages</a>的一种计算方式（冥冥之中感觉这种计算方法应用很广啊，例如流式数据朴素的平均数计算相当浪费内存，如果也可以这样……，果然数学优化比工程优化要牛逼的多啊）。</p>
+
+<h4>总结:</h4>
+
+<p><strong>Load average 其实就是任务队列的长度（TASK_RUNNING, TASK_UNINTERRUPTIBLE进程的数量）的MOVING AVERAGES</strong></p>
+
+<blockquote><p>很显然，TASK_UNINTERRUPTIBLE状态的进程数量如果增多，也会引起load average 增高，但是TASK_UNINTERRUPTIBLE状态的进程并没有在消耗CPU，例如可能是在做IO 等待等，所以load 如果短时升高，也没有问题；同样，如果长时间很高，也有可能是磁盘IO负载较高引起的。</p>
+
+<p>load 其实没有一个纸面上的阈值，只能凭借对操作系统知识的了解，以及工作场景等实际经验来判断load的含义，其值也只是用来发现问题，而不是解释问题的，如果发现load过高，还是需要在实际场景上去寻找问题原因，进行针对性优化</p></blockquote>
+
+<hr />
+
+<p><strong>参考资料：</strong></p>
+
+<ol>
+<li><a href="http://www.linfo.org/process_state.html">Process State Definition</a></li>
+<li><a href="https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt">CFS Scheduler</a></li>
+<li><a href="http://www.linuxjournal.com/article/9001?page=0,1">Examining Load Average</a></li>
+<li><a href="http://dbanotes.net/arch/unix_linux_load.html">Unix/Linux 的 Load 初级解释 </a></li>
+<li><a href="http://blog.scoutapp.com/articles/2009/07/31/understanding-load-averages">Understanding linux cpu load - when should you be worried?</a></li>
+<li><a href="http://www.teamquest.com/files/9214/2049/9761/ldavg1.pdf">UNIX Load Average Part 1: How It Works</a></li>
+<li><a href="http://www.teamquest.com/files/6714/2049/9760/ldavg2.pdf">UNIX Load Average Part 2: Not Your Average Average</a></li>
+</ol>
+
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-05-05T17:03:00+08:00" pubdate data-updated="true">May 5<span>th</span>, 2016</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/linux/'>linux</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2016/05/05/linux-cpu-load/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2014/11/29/daemon-ho-to/">
+		
+			如何实现一个daemon</a>
+	</h2>
+	<div class="entry-content">
+		<p>Linux下经常需要将服务程序实现为<strong>daemon</strong>（<strong>守护进程</strong>）。从而完成后台运行，开机启动，关机正常结束的功能。</p>
+
+<hr />
+
+<h3>需求：</h3>
+
+<ul>
+<li><strong>后台运行</strong> ：摆脱tty控制</li>
+<li><strong>根目录运行</strong> ：切换工作目录至(/)，防止机器重启工作目录处于Unmount状态，导致进程无法正常工作</li>
+<li><strong>标准io重定向</strong> ：重定向stdin,stdout,stderr</li>
+<li><strong>文件创建模式</strong> ：提高创建文件权限</li>
+<li><strong>屏蔽/接管信号</strong> ： 屏蔽或者接管部分signals处理</li>
+<li><strong>Single instance</strong> ： 可选</li>
+<li><strong>开机启动</strong> ：可选</li>
+</ul>
+
+
+<h3>How to:</h3>
+
+<h4>修改文件创建模式屏蔽字</h4>
+
+<ul>
+<li>umask(0) : 将文件创建模式屏蔽字设置为0</li>
+</ul>
+
+
+<h4>摆脱tty</h4>
+
+<ul>
+<li>fork 并退出父进程（子进程不是session leader，为setsid创造条件）</li>
+<li>调用setsid，使子进程成为session leader，同时成为一个process group leader，此时已摆脱tty</li>
+<li>再次fork，并退出父进程，摆脱session leader，从而避免进程取得tty控制权限。（如果每次open /dev/tty* 的时候都使用O_NOCTTY, 则该步骤可以取消）</li>
+</ul>
+
+
+<h4>写并锁定pidfile</h4>
+
+<ul>
+<li>锁定pidfile，并将pid写入pidfile，如果pidfile已经存在，说明实例已经启动</li>
+</ul>
+
+
+<h4>切换目录</h4>
+
+<ul>
+<li>cddir(&#8220;/&#8221;)</li>
+</ul>
+
+
+<h4>屏蔽signals</h4>
+
+<p>－ 屏蔽或者后续自己写代码处理相应signals(nohup 无法完成该任务)</p>
+
+<h4>重定向标准io</h4>
+
+<ul>
+<li>可以选择关闭或者重定向标准io到指定文件</li>
+</ul>
+
+
+<h4>开机启动</h4>
+
+<ul>
+<li>参考/etc/init.d/skeleton 实现启动/停止脚本, 并使用update-rc.d添加为启动项</li>
+</ul>
+
+
+<h3>Code example:</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="kt">bool</span> <span class="n">DaemonInit</span><span class="p">()</span>
+</span><span class='line'> <span class="p">{</span>
+</span><span class='line'>    <span class="cm">/* Our process ID and Session ID */</span>
+</span><span class='line'>    <span class="n">pid_t</span> <span class="n">pid</span><span class="p">,</span> <span class="n">sid</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Change the file mode mask */</span>
+</span><span class='line'>    <span class="n">umask</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Fork off the parent process */</span>
+</span><span class='line'>    <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;First fock failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/* If we got a good PID, then</span>
+</span><span class='line'><span class="cm">     * we can exit the parent process. */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_SUCCESS</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Create a new SID for the child process */</span>
+</span><span class='line'>    <span class="n">sid</span> <span class="o">=</span> <span class="n">setsid</span><span class="p">();</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">sid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Setsid failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Fork off the second time */</span>
+</span><span class='line'>    <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">std</span><span class="o">::</span><span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Second fork failed!&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/* If we got a good PID, then</span>
+</span><span class='line'><span class="cm">     * we can exit the parent process. */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_SUCCESS</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Ignore signals */</span>
+</span><span class='line'>    <span class="n">signal</span><span class="p">(</span><span class="n">SIGCHLD</span><span class="p">,</span> <span class="n">SIG_IGN</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">signal</span><span class="p">(</span><span class="n">SIGHUP</span><span class="p">,</span> <span class="n">SIG_IGN</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>   <span class="cm">/* Change the current working directory */</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">((</span><span class="n">chdir</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">//需保证 pid_fd 生命周期与进程生命周期一致</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">pid_fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="s">&quot;/var/run/daemon_example.pid&quot;</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="o">|</span><span class="n">O_CREAT</span><span class="p">,</span> <span class="mo">0640</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span> <span class="n">pid_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not open &quot; &lt;&lt; pidfile_ &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">lockf</span><span class="p">(</span><span class="n">fd_</span><span class="p">,</span> <span class="n">F_TLOCK</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Another instance is running!&quot; &lt;&lt; std::endl;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/*write and lock pid file*/</span>
+</span><span class='line'>    <span class="n">std</span><span class="o">::</span><span class="n">stringstream</span> <span class="n">stream</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">stream</span> <span class="o">&lt;&lt;</span> <span class="n">getpid</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">pidstr</span> <span class="o">=</span> <span class="n">stream</span><span class="p">.</span><span class="n">str</span><span class="p">();</span>
+</span><span class='line'>    <span class="n">ssize_t</span> <span class="n">len</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">fd_</span><span class="p">,</span> <span class="n">pidstr</span><span class="p">.</span><span class="n">c_str</span><span class="p">(),</span> <span class="n">pidstr</span><span class="p">.</span><span class="n">length</span><span class="p">());</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">len</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Write to /var/run/daemon_example.pid failed!&quot;</span>
+</span><span class='line'>        <span class="c1">//          &lt;&lt; std::endl;;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Close out the standard file descriptors */</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not close STDIN_FILENO!&quot; &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not close STDOUT_FILENO!&quot; &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">STDERR_FILENO</span><span class="p">)</span>  <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="c1">//std::cerr &lt;&lt; &quot;Can not close STDERR_FILENO!&quot; &lt;&lt; std::endl;</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="cm">/*redirect standard output*/</span>
+</span><span class='line'>    <span class="c1">//需保证 output_fd 生命周期与进程生命周期一致</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">output_fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">DEV_NULL</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">output_fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">dup2</span><span class="p">(</span><span class="n">output_fd</span><span class="p">,</span> <span class="n">STDIN_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">dup2</span><span class="p">(</span><span class="n">output_fd</span><span class="p">,</span> <span class="n">STDOUT_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">if</span><span class="p">(</span><span class="n">dup2</span><span class="p">(</span><span class="n">output_fd</span><span class="p">,</span> <span class="n">STDERR_FILENO</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>参考</h3>
+
+<ol>
+<li><a href="http://www.apuebook.com/">《APUE》 Chapter 13</a></li>
+<li><a href="http://netzmafia.de/skripten/unix/linux-daemon-howto.html">Daemon how to</a></li>
+<li><a href="https://stackoverflow.com/questions/17954432/creting-a-daemon-in-linux">Creating a daemon in Linux</a></li>
+<li><a href="https://stackoverflow.com/questions/958249/whats-the-difference-between-nohup-and-a-daemon">What&#8217;s the difference between nohup and a daemon?</a></li>
+</ol>
+
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-11-29T16:46:00+08:00" pubdate data-updated="true">Nov 29<span>th</span>, 2014</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/daemon/'>daemon</a>, <a class='category' href='/tags/linux/'>linux</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2014/11/29/daemon-ho-to/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2014/04/27/std-bind-in-c-plus-plus/">
+		
+			函数对象与std::bind</a>
+	</h2>
+	<div class="entry-content">
+		<hr />
+
+<h3>函数指针</h3>
+
+<p>主要有以下两类：</p>
+
+<ol>
+<li>一般函数指针（普通函数指针 and static 成员函数指针）</li>
+<li>非static成员函数指针</li>
+</ol>
+
+
+<h4>一般函数指针</h4>
+
+<h5>初始化</h5>
+
+<p>普通函数指针</p>
+
+<blockquote><p>func_type func = function_name;</p></blockquote>
+
+<p>or</p>
+
+<blockquote><p>func_type func = &amp;function_name;</p></blockquote>
+
+<p>static 成员函数指针</p>
+
+<blockquote><p>func_type func = ClassName::function_name;</p></blockquote>
+
+<p>or</p>
+
+<blockquote><p>func_type func = &amp;ClassName::function_name;</p></blockquote>
+
+<h5>调用</h5>
+
+<blockquote><p>function_name(arg);</p></blockquote>
+
+<p>or</p>
+
+<blockquote><p>(*function_name)(arg);</p></blockquote>
+
+<p><em>注：同数组名类似，对函数名而言 functin_name 和 &amp;function_name 是一样的，即地址相同，所以，上述的两种写法都可以</em></p>
+
+<h4>对于类的非static成员函数指针</h4>
+
+<h5>初始化</h5>
+
+<blockquote><p>func_type func = &amp;function_name;</p></blockquote>
+
+<h5>调用</h5>
+
+<blockquote><p>(obj.*func)(arg);</p></blockquote>
+
+<p>即，非static成员函数在初始化时，必须以&amp;的方式避免歧义，否则编译会报错为 <code>invalid use of non-static member function</code></p>
+
+<hr />
+
+<h3>函数对象</h3>
+
+<p>C++推荐使用函数对象（仿函数）来替代函数指针，这样可以避免指针操作带来的繁琐，切可以维护数据，使函数带有自己的状态
+函数对象主要通过重载operator()来实现，例如：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="k">struct</span> <span class="n">Max</span>
+</span><span class='line'> <span class="p">{</span>
+</span><span class='line'>   <span class="n">Max</span><span class="p">()</span><span class="err"> </span><span class="o">:</span> <span class="n">times</span><span class="p">()</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="kt">int</span> <span class="k">operator</span><span class="p">()(</span><span class="kt">int</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">b</span><span class="p">)</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Called &quot;</span> <span class="o">&lt;&lt;</span> <span class="o">++</span><span class="n">times</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; times match&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span><span class='line'>     <span class="k">return</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="n">b</span><span class="err"> </span><span class="o">?</span> <span class="n">a</span><span class="err"> </span><span class="o">:</span> <span class="n">b</span><span class="p">;</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="kt">int</span> <span class="n">times</span><span class="p">;</span>
+</span><span class='line'> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>同时我们可以声明一个函数对象</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="n">Max</span> <span class="n">max</span><span class="p">;</span>
+</span><span class='line'><span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">int</span><span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">func</span> <span class="o">=</span> <span class="n">max</span><span class="p">;</span>  <span class="c1">//拷贝</span>
+</span><span class='line'><span class="n">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">3</span><span class="p">);</span>
+</span><span class='line'><span class="n">func</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+</span><span class='line'><span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">ref</span><span class="p">(</span><span class="n">max</span><span class="p">);</span> <span class="c1">//引用该对象</span>
+</span><span class='line'><span class="n">func</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>output:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'><span class="n">Called</span> <span class="mi">1</span> <span class="n">times</span> <span class="n">match</span>
+</span><span class='line'><span class="n">Called</span> <span class="mi">1</span> <span class="n">times</span> <span class="n">match</span>
+</span><span class='line'><span class="n">Called</span> <span class="mi">2</span> <span class="n">times</span> <span class="n">match</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<hr />
+
+<h3>std::bind</h3>
+
+<blockquote><p>用于绑定函数参数，返回函数对象</p></blockquote>
+
+<h4>使用示例：</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='cpp'><span class='line'> <span class="k">class</span> <span class="nc">Test</span>
+</span><span class='line'> <span class="p">{</span>
+</span><span class='line'> <span class="k">public</span><span class="o">:</span>
+</span><span class='line'>   <span class="kt">void</span> <span class="n">print</span><span class="p">()</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="o">++</span><span class="n">value</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'>   <span class="kt">void</span> <span class="n">addX</span><span class="p">(</span><span class="kt">int</span> <span class="n">x</span><span class="p">);</span>
+</span><span class='line'>   <span class="p">{</span>
+</span><span class='line'>     <span class="n">value</span> <span class="o">+=</span> <span class="n">x</span><span class="p">;</span>
+</span><span class='line'>     <span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="n">value</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'> <span class="k">private</span><span class="o">:</span>
+</span><span class='line'>   <span class="kt">int</span> <span class="n">value</span><span class="p">;</span>
+</span><span class='line'> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'> <span class="n">Test</span> <span class="n">test</span><span class="p">;</span>
+</span><span class='line'> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">()</span><span class="o">&gt;</span> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">print</span><span class="p">,</span> <span class="n">test</span><span class="p">);</span>  <span class="c1">//test 传值</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 1</span>
+</span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 1</span>
+</span><span class='line'> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">print</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">);</span>    <span class="c1">//传引用</span>
+</span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 2</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 3</span>
+</span><span class='line'> <span class="n">func</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="mi">5</span><span class="p">);</span>  <span class="c1">//多参数绑定</span>
+</span><span class='line'> <span class="n">func</span><span class="p">();</span>        <span class="c1">//  value is 8</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 9</span>
+</span><span class='line'> <span class="n">std</span><span class="o">::</span><span class="n">function</span><span class="o">&lt;</span><span class="kt">void</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="o">&gt;</span> <span class="n">func1</span><span class="p">;</span>
+</span><span class='line'> <span class="n">func1</span> <span class="o">=</span> <span class="n">std</span><span class="o">::</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">Test</span><span class="o">::</span><span class="n">addX</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">test</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">placeholders</span><span class="o">::</span><span class="n">_1</span><span class="p">);</span>  <span class="c1">//参数占位</span>
+</span><span class='line'> <span class="n">func1</span><span class="p">(</span><span class="mi">4</span><span class="p">);</span>      <span class="c1">//  value is 13</span>
+</span><span class='line'> <span class="n">test</span><span class="p">.</span><span class="n">print</span><span class="p">();</span>  <span class="c1">//  value is 14</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>原理描述</h4>
+
+<p>bind普通函数</p>
+
+<p><img src="/images/blog_images/bind_1.png" alt="" /></p>
+
+<p>bind成员函数，如果绑定的是<code>*this</code>， 则内部调用时为<code>(v1.*fn)()</code></p>
+
+<p><img src="/images/blog_images/bind_2.png" alt="" /></p>
+
+<p>显式传递<code>this</code></p>
+
+<p><img src="/images/blog_images/bind_3.png" alt="" /></p>
+
+<p>占位预留参数</p>
+
+<p><img src="/images/blog_images/bind_4.png" alt="" /></p>
+
+<hr />
+
+<h3>相关参考&amp;援引</h3>
+
+<ol>
+<li><a href="http://www.cprogramming.com/tutorial/function-pointers.html">函数指针</a></li>
+<li><a href="http://www.cprogramming.com/tutorial/functors-function-objects-in-c++.html">函数对象</a></li>
+<li><a href="http://stackoverflow.com/questions/6893285/why-do-all-these-crazy-function-pointer-definitions-all-work-what-is-really-goi">&#8220;&amp;&#8221; in ordinary functions pointer</a></li>
+<li><a href="http://blog.think-async.com/2010/04/bind-illustrated.html">《bind illustrated》 &#8212; Christopher M. Kohlhoff </a></li>
+</ol>
+
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-04-27T14:51:00+08:00" pubdate data-updated="true">Apr 27<span>th</span>, 2014</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/cpp/'>cpp</a>, <a class='category' href='/tags/std-bind/'>std::bind</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2014/04/27/std-bind-in-c-plus-plus/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2014/04/27/hello-world/">
+		
+			Hello World</a>
+	</h2>
+	<div class="entry-content">
+		<p>hello world</p>
+
+<p>hello world</p>
+
+<p>hello world</p>
+
+<p>hello world</p>
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-04-27T14:45:00+08:00" pubdate data-updated="true">Apr 27<span>th</span>, 2014</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/hello/'>hello</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2014/04/27/hello-world/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+<nav id="pagenavi">
+    
+        <a href="/blog/page/2/" class="prev">Prev</a>
+    
+    
+    <div class="center"><a href="/blog/archives">Blog Archives</a></div>
+</nav></div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

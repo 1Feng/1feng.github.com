@@ -1,0 +1,274 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>《Time, clocks, and the ordering of events in a distributed system》summary - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="Summary Happend before 用→来表示hanppend before，对于任意event a, b 有： 如果a和b属于同一个process，并且a comes before b, 则 a → b
+如果a是某个process发送信息的event， &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">《Time, Clocks, and the Ordering of Events in a Distributed System》summary</h2>
+	<div class="entry-content"><h1>Summary</h1>
+
+<h3>Happend before</h3>
+
+<p>用→来表示<code>hanppend before</code>，对于任意event a, b 有：</p>
+
+<ol>
+<li>如果a和b属于同一个process，并且a comes before b, 则 a → b</li>
+<li>如果a是某个process发送信息的event，b是另一个process接收该信息的event，那么 a → b</li>
+<li>如果 a → b并且 b → c，那么 a → c</li>
+</ol>
+
+
+<p>以上本质是基于一个因果关系(causality)来定义的<code>hanppend before</code></p>
+
+<p><code>concurrence</code>意味着a → b不成立并且b→a也不成立，即a,b之间缺少因果关系</p>
+
+<p>b →  c 并且 a  →  c, 但是a,b并不能推导出因果关系，因此<code>happend before</code>是partial order.
+同时由于a → a不成立，所以<code>happend before</code>是反自反(irreflexive)的partial order</p>
+
+<h3>logical clocks</h3>
+
+<p>定义Ci(b)为event b在process i 上发生时的clock。</p>
+
+<p>对于任意的events a,b：</p>
+
+<blockquote><p>如果a → b,则C(a)&lt; C(b)</p></blockquote>
+
+<p>显而易见：</p>
+
+<ol>
+<li>如果a,b同属于process Pi, 并且 a comes before b, 则C(a) &lt; C(b)</li>
+<li>如果a是Pi上发送信息的event，b是Pj上接收该信息的event，那么Ci(a) &lt; Cj(b)</li>
+</ol>
+
+
+<p>具体实现：</p>
+
+<ol>
+<li>对于任意Pi在两个successive event之间会增加Ci, Ci += 1</li>
+<li>以下</li>
+<li>a. 如果a是Pi上发送信息的event，信息m包含一个时间戳Tm = Ci(a)</li>
+<li>b. 当Pj收到信息m，设置Cj = max(Cj, Tm) + 1</li>
+</ol>
+
+
+<p>Logical Clock 的缺点：a, b可能同时发生，C(a) &lt; C(b)并不能推断出a → b</p>
+
+<h3>total ordering</h3>
+
+<blockquote><p>In mathematics, a linear order, total order, simple order, or (non-strict) ordering is a binary relation on some set X, which is antisymmetric, transitive, and total. A set paired with a total order is called a totally ordered set, a linearly ordered set, a simply ordered set, or a chain. &#8212;- from wikipedia</p></blockquote>
+
+<p>定义关系=>如下：</p>
+
+<blockquote><p>如果a属于Pi，b属于Pj，a => b当且仅当要么Ci(a) &lt; Ci(b)要么Ci(a) = Ci(b) 并且Pi &lt; Pj</p></blockquote>
+
+<p>Pi &lt; Pj可以是process name 字典序或者数字标示的顺序。</p>
+
+<p>total ordering强调对于任意两个元素都有可比性</p>
+
+<p>paper中举例使用no-fault-tolent total ordering解决分布式情况下mutual exclusion的问题</p>
+
+<p>值得特别强调的一点，这里的total ordering和<code>hanppend before</code>没有关系，但是total ordering的意义在于可以用在例如mutual exclusion场景，用顺序来保证fairness（一般的mutual exclusion的关系是FIFO来保证fairness的）</p>
+
+<h3>Anomalous Behavior</h3>
+
+<p>例如：</p>
+
+<ol>
+<li>event a : P 发送消息到R</li>
+<li>event b :  P发送消息到Q，Q将消息转发给R</li>
+</ol>
+
+
+<p>对于P而言 a→b,但是由于网络延迟R就不一定这么认为了。</p>
+
+<p>解决方法有两种：</p>
+
+<ol>
+<li>发送的消息中带上logical clock</li>
+<li>利用Physical Clock</li>
+</ol>
+
+
+<h3>Physical Clocks</h3>
+
+<p>大概介绍了什么样（主要指同步）的physical clock可以用来解决上述的问题。</p>
+
+<h3>References</h3>
+
+<ol>
+<li><a href="https://en.wikipedia.org/wiki/Lamport_timestamps">wikipedia</a></li>
+<li><a href="https://www.amazon.com/Distributed-Systems-Algorithmic-Approach-Information/dp/1466552972">《Distributed Systems An Algorithmic Approach Second Edition》 6.2 Logical Clock</a></li>
+<li><a href="https://www.amazon.com/Distributed-Systems-Algorithmic-Approach-Information/dp/1466552972">《Distributed Systems An Algorithmic Approach Second Edition》 7.2 Solutions On Message-Passing Systems</a></li>
+</ol>
+
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-03T23:59:00+08:00" pubdate data-updated="true">Jun 3<span>rd</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

@@ -4,7 +4,7 @@
   <title><![CDATA[Category: system | 1Feng's Blog]]></title>
   <link href="http://1feng.github.io/tags/system/atom.xml" rel="self"/>
   <link href="http://1feng.github.io/"/>
-  <updated>2016-09-17T21:08:08+08:00</updated>
+  <updated>2019-03-04T20:05:39+08:00</updated>
   <id>http://1feng.github.io/</id>
   <author>
     <name><![CDATA[Travis Swicegood]]></name>
@@ -14,1055 +14,568 @@
 
   
   <entry>
-    <title type="html"><![CDATA[leveldb源码笔记之读操作]]></title>
-    <link href="http://1feng.github.io/2016/09/10/leveldb-read/"/>
-    <updated>2016-09-10T22:07:00+08:00</updated>
-    <id>http://1feng.github.io/2016/09/10/leveldb-read</id>
-    <content type="html"><![CDATA[<h3>key逻辑分类</h3>
-
-<p>根据我们之前文章的描述，leveldb的数据存储可能存在在内存的memtable中，或者磁盘的sstalbe中，但是key的实际存储格式会略微有差异，代码里按照存储的位置，划分为以下几种类型：</p>
-
-<blockquote><p><strong>memtable</strong>: 逻辑上称为memtable_key</p>
-
-<p><strong>sstalbe</strong>: 逻辑上称为internal_key</p>
-
-<p><strong>key</strong>: 用户提供的key，我们称之为user_key</p></blockquote>
-
-<p>当用户去查询某个key时，leveldb会先利用key构建起Lookupkey类</p>
-
-<p>Lookupkey类内部的完整数据即memtable_key，可以方便的利用成员函数截取memtable_key,internal_key,user_key以方便去memtalble和sstable中查询</p>
-
-<p>事实上LookupKey是由 key， sequence number组成的，如之前文章提到:</p>
-
-<ul>
-<li>如果普通Get()操作，sequence number 为 last sequence number</li>
-<li>如果是使用的snapshot, sequence number 为 snapshot sequence number</li>
-</ul>
-
-
-<p>``` cpp
-// dbformat.h
-// lookup key format:
-// start<em>       kstart</em>                                         end_
-//   |             |                                             |
-//   |             |<--user_key-->|                              |
-//   |             |<---------------internal_key---------------->|
-//   |<---------------------memtable_key------------------------>|
-//   -------------------------------------------------------------
-//   |  1--5 byte  | klenght byte |           8 byte             |
-//   -------------------------------------------------------------
-//   | klenght + 8 |   raw key    | pack(sequence number, type)) |
-//   -------------------------------------------------------------
-// A helper class useful for DBImpl::Get()
-class LookupKey {
- public:
-  // Initialize *this for looking up user_key at a snapshot with
-  // the specified sequence number.
-  LookupKey(const Slice&amp; user_key, SequenceNumber sequence);</p>
-
-<p>  ~LookupKey();</p>
-
-<p>  // Return a key suitable for lookup in a MemTable.
-  Slice memtable_key() const { return Slice(start<em>, end</em> - start_); }</p>
-
-<p>  // Return an internal key (suitable for passing to an internal iterator)
-  Slice internal_key() const { return Slice(kstart<em>, end</em> - kstart_); }</p>
-
-<p>  // Return the user key
-  Slice user_key() const { return Slice(kstart<em>, end</em> - kstart_ - 8); }</p>
-
-<p> private:
-  const char<em> start_;
-  const char</em> kstart<em>;
-  const char* end</em>;
-  char space_[200];      // Avoid allocation for short keys</p>
-
-<p>  // No copying allowed
-  LookupKey(const LookupKey&amp;);
-  void operator=(const LookupKey&amp;);
-};
-```
-如图:
-<img src="/images/blog_images/leveldb/leveldb-keys.png" alt="" /></p>
-
-<h3>读操作</h3>
-
-<p>图示Get()操作的基本逻辑如下：
-<img src="/images/blog_images/leveldb/leveldb-read.png" alt="" />
-以上我们是假设sstable没有filter的情况下的操作逻辑</p>
-
-<h3>cache</h3>
-
-<p>无论是table cache，还是block cache，都是使用了相同的数据结构LRUCache来实现的，区别只在于内部存储的数据不同。</p>
-
-<p>LRUCache是通过k/v方式存储的，对于：</p>
-
-<p><strong>TableCache</strong>:</p>
-
-<ul>
-<li>key: 其实就是file number
-<code>cpp
-// table_cache.cc
-char buf[sizeof(file_number)];
-EncodeFixed64(buf, file_number);
-Slice key(buf, sizeof(buf));
-</code></li>
-<li>value: TableAndFile， 其实主要是sstable index block里的数据
-```cpp
-// table_cache.cc
-struct TableAndFile {
-RandomAccessFile<em> file;
-Table</em> table;
-};</li>
-</ul>
-
-
-<p>// table.cc
-// Table里的主要数据即下述
-struct Table::Rep {</p>
-
-<pre><code>~Rep() {
-  delete filter;
-  delete [] filter_data;
-  delete index_block;
-}
-
-Options options;
-Status status;
-RandomAccessFile* file;
-uint64_t cache_id;
-FilterBlockReader* filter;
-const char* filter_data;
-
-BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
-Block* index_block;
-</code></pre>
-
-<p>};
-```
-<strong>BlockCache</strong>:</p>
-
-<ul>
-<li>key: 其实是 cache_id 和 block 在sstable中的offset的组合
-<code>cpp
-// table.cc
-char cache_key_buffer[16];
-// 构造block_cache 的key
-EncodeFixed64(cache_key_buffer, table-&gt;rep_-&gt;cache_id);
-EncodeFixed64(cache_key_buffer+8, handle.offset());
-Slice key(cache_key_buffer, sizeof(cache_key_buffer));
-</code></li>
-<li><p>value: data block 内容
-```cpp
-// block.h
-class Block {
-public:
-// Initialize the block with the specified contents.
-explicit Block(const BlockContents&amp; contents);</p>
-
-<p>~Block();</p>
-
-<p>size_t size() const { return size_; }
-Iterator<em> NewIterator(const Comparator</em> comparator);</p></li>
-</ul>
-
-
-<p> private:
-  uint32_t NumRestarts() const;</p>
-
-<p>  const char* data<em>;
-  size_t size</em>;
-  uint32_t restart_offset<em>;     // Offset in data</em> of restart array
-  bool owned<em>;                  // Block owns data</em>[]</p>
-
-<p>  // No copying allowed
-  Block(const Block&amp;);
-  void operator=(const Block&amp;);</p>
-
-<p>  class Iter;
-};
-```</p>
-
-<h4>cache 逻辑结构图示</h4>
-
-<p><img src="/images/blog_images/leveldb/leveldb-cache.png" alt="" /></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[leveldb源码笔记之MVCC && Manifest]]></title>
-    <link href="http://1feng.github.io/2016/08/24/mvcc-and-manifest/"/>
-    <updated>2016-08-24T15:51:00+08:00</updated>
-    <id>http://1feng.github.io/2016/08/24/mvcc-and-manifest</id>
-    <content type="html"><![CDATA[<h3>MVCC</h3>
-
-<p><strong>问题</strong>:
-针对同一条记录，如果读和写在同一时间发生时，reader可能会读取到不一致或者写了一半的数据</p>
-
-<p><strong>常见解决方案</strong></p>
-
-<blockquote><p>悲观锁：</p>
-
-<blockquote><p>最简单的方式,即通过锁来控制并发，但是效率非常的低,增加的产生死锁的机会</p></blockquote>
-
-<p>乐观锁：</p>
-
-<blockquote><p>它假设多用户并发的事物在处理时不会彼此互相影响，各食物能够在不产生锁的的情况下处理各自影响的那部分数据。在提交数据更新之前，每个事务会先检查在该事务读取数据后，有没有其他事务又修改了该数据。如果其他事务有更新的话，正在提交的事务会进行回滚;这样做不会有锁竞争更不会产生思索，但如果数据竞争的概率较高，效率也会受影响</p></blockquote>
-
-<p>MVCC -- Multiversion concurrency control:</p>
-
-<blockquote><p>每一个执行操作的用户，看到的都是数据库特定时刻的的快照(snapshot), writer的任何未完成的修改都不会被其他的用户所看到;当对数据进行更新的时候并是不直接覆盖，而是先进行标记, 然后在其他地方添加新的数据，从而形成一个新版本, 此时再来读取的reader看到的就是最新的版本了。所以这种处理策略是维护了多个版本的数据的,但只有一个是最新的。</p></blockquote></blockquote>
-
-<h3>Key/Value</h3>
-
-<p>如<a href="http://1feng.github.io/2016/08/18/leveldb-write/">前文</a>所述，leveldb中写入一条记录，仅仅是先写入binlog，然后写入memtable</p>
-
-<ul>
-<li><p><strong>binlog</strong>: binlog的写入只需要append，无需并发控制</p></li>
-<li><p><strong>memtable</strong>: memtable是使用Memory Barriers技术实现的无锁的skiplist</p></li>
-<li><p><strong>更新</strong>: 真正写入memtable中参与skiplist排序的key其实是包含sequence number的，所以更新操作其实只是写入了一条新的k/v记录, 真正的更新由compact完成</p></li>
-<li><p><strong>删除</strong>: 如<a href="http://1feng.github.io/2016/08/18/leveldb-write/">前文</a>提到，删除一条Key时，仅仅是将type标记为kTypeDeletion，写入(同上述写入逻辑)了一条新的记录，并没有真正删除,真正的删除也是由compact完成的</p></li>
-</ul>
-
-
-<h4>Sequence Number</h4>
-
-<ul>
-<li><p>sequence number 是一个由VersionSet直接持有的全局的编号，每次写入（<code>注意批量写入时sequence number是相同的</code>），就会递增</p></li>
-<li><p>根据我们之前对写入操作的分析，我们可以看到，当插入一条key的时候，实际参与排序，存储的是key和sequence number以及type组成的
-InternalKey</p></li>
-<li><p>当我们进行Get操作时，我们只需要找到目标key，同时其sequence number &lt;= specific sequence number</p>
-
-<ul>
-<li>普通的读取，sepcific sequence number == last sequence number</li>
-<li>snapshot读取，sepcific sequenc number == snapshot sequence number</li>
-</ul>
-</li>
-</ul>
-
-
-<h4>Snapshot</h4>
-
-<p>snapshot 其实就是一个sequence number，获取snapshot，即获取当前的last sequence number</p>
-
-<p>例如：
-<code>cpp
-  string key = 'a';
-  string value = 'b';
-  leveldb::Status s = db-&gt;Put(leveldb::WriteOptions(), key, value);
-  assert(s.ok())
-  leveldb::ReadOptions options;
-  options.snapshot = db-&gt;GetSnapshot();
-  string value = 'c';
-  leveldb::Status s = db-&gt;Put(leveldb::WriteOptions(), key, value);
-  assert(s.ok())
-  // ...
-  // ...
-  value.clear();
-  s = db-&gt;Get(leveldb::ReadOptions(), key, &amp;value);   // value == 'c'
-  assert(s.ok())
-  s = db-&gt;Get(options, key, &amp;value);   // value == 'b'
-  assert(s.ok())
-</code></p>
-
-<ul>
-<li>我们知道在sstable compact的时候，才会执行真正的删除或覆盖，而覆盖则是如果发现两条相同的记录
-会丢弃旧的(sequence number较小)一条，但是这同时会破坏掉snapshot</li>
-<li>那么 key = 'a', value = 'b'是如何避免compact时被丢弃掉的呢？
-
-<ul>
-<li>db在内存中记录了当前用户持有的所有snapshot</li>
-<li>smallest snapshot = has snapshot ? oldest snapshot : last sequence number</li>
-<li>当进行compact时，如果发现两条相同的记录，只有当两条记录的sequence number都小于 smallest snapshot 时才丢弃掉其中sequence number较小的一条</li>
-</ul>
-</li>
-</ul>
-
-
-<h3>Sstable</h3>
-
-<p>sstable级别的MVCC是利用Version和VersionEdit实现的：</p>
-
-<ul>
-<li>只有一个current version，持有了最新的sstable集合</li>
-<li>VersionEdit代表了一次current version的更新, 新增了那些sstable，哪些sstable已经没用了等</li>
-</ul>
-
-
-<p><img src="/images/blog_images/leveldb/mvcc.png" alt="" /></p>
-
-<h3>Mainifest</h3>
-
-<p>每次current version 更新的数据(即新产生的VersionEdit)都写入mainifest文件，以便重启时recover</p>
-
-<p><img src="/images/blog_images/leveldb/write_a_manifest.png" alt="" /></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[leveldb源码笔记之sstable]]></title>
-    <link href="http://1feng.github.io/2016/08/22/sstable-summary/"/>
-    <updated>2016-08-22T11:19:00+08:00</updated>
-    <id>http://1feng.github.io/2016/08/22/sstable-summary</id>
-    <content type="html"><![CDATA[<h3>整体看下sstable的组要组成，如下：</h3>
-
-<p><img src="/images/blog_images/leveldb/sstable.png" alt="" /></p>
-
-<h3>sstalbe 生成细节</h3>
-
-<blockquote><p>sstable 生成时机:</p>
-
-<p>minor compaction</p>
-
-<blockquote><p>immutable-memtable 中的key/value dump到磁盘，生成sstable</p></blockquote>
-
-<p>major compaction</p>
-
-<blockquote><p>sstable compact（level-n sstable(s)与level-n+1 sstables多路归并）生成level-n+1的sstable</p></blockquote></blockquote>
-
-<h4>首先是写入data block:</h4>
-
-<p><img src="/images/blog_images/leveldb/write_a_data_block.png" alt="" /></p>
-
-<h4>data block都写入完成后，接下来是meta block:</h4>
-
-<p><img src="/images/blog_images/leveldb/write_a_meta_block.png" alt="" /></p>
-
-<h4>然后是data/meta block索引信息data/meta index block写入:</h4>
-
-<p><img src="/images/blog_images/leveldb/write_a_index_block.png" alt="" /></p>
-
-<h4>最后将index block的索引信息写入Footer</h4>
-
-<p><img src="/images/blog_images/leveldb/write_a_footer.png" alt="" /></p>
-
-<h4>一个完整的sstable形成!</h4>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[signal with mutex locked or not(译)]]></title>
-    <link href="http://1feng.github.io/2016/07/20/signal-with-mutex-locked-or-not/"/>
-    <updated>2016-07-20T16:48:00+08:00</updated>
-    <id>http://1feng.github.io/2016/07/20/signal-with-mutex-locked-or-not</id>
-    <content type="html"><![CDATA[<p><a href="http://www.domaigne.com/blog/computing/condvars-signal-with-mutex-locked-or-not/">原文链接</a></p>
-
-<h3>介绍</h3>
-
-<p>当我们使用条件变量的时候，总有这样一个问题：到底该在解锁mutex之前进行sinal/broadcast，还是在之后？</p>
-
-<p>什么时候进行signal？</p>
-
-<p>``` c
-pthread_mutex_lock(&amp;mutex);
-predicate=true;
-pthread_cond_signal(&amp;cv);    // OR: pthread_mutex_unlock(&amp;mutex);
-pthread_mutex_unlock(&amp;mutex); //  : pthread_cond_signal(&amp;cv);</p>
-
-<p>```</p>
-
-<h3>权威解答</h3>
-
-<p><a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_cond_signal.html">SUS7</a>中提到：</p>
-
-<blockquote><p>当其他线程利用pthread_cond_wait() 或pthread_cond_timedwait() 在关联的条件变量上等待时，当前线程既可以在持有（锁住）mutex时调用pthread_cond_broadcast()或 pthread_cond_signal() ，也可以在不持有mutex的情况下调用。然而，如果需要可预测的线程调度行为，则需要在mutex被锁住的情况下调用pthread_cond_broadcast() 或 pthread_cond_signal()</p></blockquote>
-
-<p>上述具体时什么意思呢？</p>
-
-<h3>锁住mutex时进行signal</h3>
-
-<p>在某些平台上，OS就在 signal/boadcast 之后进行上下文切换（context switch）来唤醒等待线程以达到降低延迟的效果。在一个单处理的系统上，如果我们在持有mutex的情况signal/broadcast则会导致不必要的上下文切换（context switch）.</p>
-
-<ul>
-<li><img src="/images/blog_images/signal-ctx-switch.jpg" alt="Fig 1- 锁住mutex时进行signal，我们造成了两次不必要的上下文切换（context switch）" /></li>
-</ul>
-
-
-<p>事实上，考虑figure 1中的场景。线程T2阻塞在条件变量上。当 T1 在持有关联的mutex的情况下 signal 条件变量时，上下文切换至T2导致T2被唤醒。但是在pthread_cond_wait返回之前，T2需要锁住条件变量关联的mutex。然而条件变量关联的mutex此时仍被T1持有（锁住）。结果导致T2被阻塞（由于mutex竞争）并且上下文切换至T1。之后T1解锁条件变量关联的mutex，同时T2最终变为runalbe状态。当我们对多个线程进行条件变量broadcast（多播）时，情况会变的更加糟糕。</p>
-
-<p>有些Pthreds 使用名为 <strong>wait morphing</strong> [1]的优化实现方式来应对这个缺陷。这种优化可以在持有锁的情况下避免上下文切换(context swith)直接将线程从条件变量队列转移至mutex队列。例如 NPTL 使用了<strong>类似的技术</strong>[2]来优化broadcat.</p>
-
-<p>当我们的实现没有使用 wait morphing时，我们可能需要先解锁然后在进行 signal/broadcast. 事实上，解锁操作不会导致上下文切换至T2，因为T2阻塞在了条件变量上。当signal/broadcast之后，T2被唤醒后会发现mutex已经被解锁，便可以持有mutex。</p>
-
-<h3>解锁mutex后signal</h3>
-
-<p>这样（译者注：解锁mutex后signal）存在缺点么？首先我们关注一个不同的情形。如果我们先signal或者broadcast，我们可以确保唤醒一个阻塞在条件变量上的线程（假设存在这样一个线程）。然而，如果我们先解锁，我们可能会唤醒一个阻塞在mutex上的线程。</p>
-
-<p>什么时候会出现这种情形呢？一个thread可能阻塞在mutex上，因为：</p>
-
-<ul>
-<li>线程即将检查谓词（译者注：条件变量的等待条件），并且最终会等待在条件变量上</li>
-<li>线程即将修改谓词，并且最终会通知等待在条件变量上的线程</li>
-</ul>
-
-
-<p>在第一种情况下，我们可能获取一个被拦截的唤醒。事实上，再次考虑figure 1中的情形，但是存在第三个线程T3，T3阻塞在mutex上(<code>译注：即将检查谓词</code>)。当T1解锁mutex，上下文切换至T3。现在T3发现谓词为真，因此执行相应处理，并且最终会在T1 signal/broadcast 条件变量之前重置谓词。当T2被唤醒，出发唤醒的条件已经不存在。在一个正确的程序设计中，这不是一个问题（<code>译注：只要你不对调度结果有所期待，这肯定不是问题</code>），因为T2总是会应对假唤醒（<code>译注：即使被唤醒也会再次检查谓词</code>）。下面的程序演示了被拦截的唤醒情形。</p>
-
-<p><a href="http://www.domaigne.com/blog/wp-content/plugins/wp-codebox/wp-codebox.php?p=33&amp;download=cv_01.c">Download cv_01.c</a></p>
-
-<p>在第二个例子（<code>译注：即线程即将修改谓词，并且最终会通知等待在条件变量上的线程</code>）里，我们最终延迟了T2的唤醒。实时上，T3可以发现T1已经修改了谓词，并且决定不再signal/broadcast。只要T1不被调度并获得机会signal/broadcast，那么T2会仍旧会阻塞。（<code>译注：一般是不会取消signal的，至少我不知道什么时候会这样做，这里只是假设你这样做了，会有潜在风险，这种风险也可以通过修改设计来避免的</code>）</p>
-
-<h3>考虑实时调度</h3>
-
-<p>在实时系统程序设计中，线程的优先级通常会被截止时间的临界所影响。 概括的说，越临近结束时间，优先级越高。不遵守时限可能会造成系统失败，结果可能会损坏我在之前<a href="http://www.domaigne.com/blog/computing/real-world-systems/">《Real World Sytems》</a>中讨论的环境。</p>
-
-<p>考虑这种情形，你明确的想要最高优先级的线程在变为runnable状态时可以尽快获取CPU时间片，但是低优先级的线程却可能阻止高优先级的线程运行，这种情形被称为优先级倒置。这种情况发生的一个例子就高优先级的线程想要锁住一个已经被低优先级线程持有的mutex。只要优先级倒置的持续时间总是很少或被限制的，这事实就不是一个问题。一个更严重的情况是优先级倒置（潜在的）不被限制, 这可能倒置高优先级的线程错过截止时间，像<strong>优先级顶置</strong>或<strong>优先级继承</strong> [3]这种协议就是被设计来规避这种问题的。</p>
-
-<blockquote><p>译者注：
-- 优先级置顶：就是给共享资源设置一个预定的优先级，这个优先级肯定大于所有会请求这个资源的线程，哪个线程获取了资源，它的优先级就提升到这个预定的优先级，这样它就会比高优先级的线程的优先级还高，等当前线程运行完不再持有共享资源，资源会率先被优先级其次的获取，同时当前线程优先级恢复正常，一切继续。这样就避免了中间优先级的线程拦截持有共享资源
-- 优先级继承：低优先级的线程获取了共享资源后，优先级不变，当高优先级的线程去请求共享资源时，低优先级的线程的优先级会被短暂提升，直至其释放掉共享资源</p></blockquote>
-
-<p>当使用实时调度策略时，signal/broadcast 操作唤醒最高优先级的线程。如果存在两个或更多线程拥有同样的优先级，会优先选择第一个阻塞在条件变量上的线程。这也是我们所期待的。</p>
-
-<p>然而，条件变量可能被不做限制的优先级倒置以三种方式影响（<code>译注：这三种情况下使用优先级顶置或者优先级继承也没用</code>）。第一种明显的倒置是条件变量关联的mutex，因为mutex自身就会被不做限制的优先级倒置所影响（<code>译注：注意和下面第三种情况做区分，这里仅仅因为mutex解锁，T3恰巧阻塞在锁上，获得锁之后并没干啥和T2相关的事，仅仅就是T3优先级低于T2</code>）。</p>
-
-<p>另外一种优先级倒置可以发生在线程signal/broadcast条件变量之前，再考虑figure 1中的情节，假设T1是一个低优先级（P1）的线程，T2是一个高优先级（P2）的线程（P1 &lt; P2）。只要T1不signal/broadcast，他就就可以被中间优先级（P3）的线程T3抢占（P1 &lt; P3 &lt; P2）（<code>译者注：注意和前一种做区分，这个抢占是cpu正常调度引起的，这里T3并没有请求获取mutex，仅仅是因为P3 &gt; P1</code>）。通常情况，如果选择先解锁再signal/broadcast, T1可以在解锁之后和signal/broadcast之前被抢占。最终T1不会唤醒T2，因此T3阻止了比它优先级更高的T2运行。如果先signal/broadcast，再解锁，我们可以保证T1解锁之后T2可以尽快被调度到，前提是mutex上使用优先级顶置或优先级继承协议（<code>译注：根据我的理解，以优先级顶置为例，T1持有mutex时，优先级会短暂提升到最高，等它释放后，T2就理所当然凭借高优先级，以及不再阻塞在条件变量上，而获取mutex</code>）。所以持有mutex时进行signal/broadcast稍微优于先unlock再singnal/broadcast(<code>译注：假设我们想要的结果是保证在T1进行signal/boadcast之后，T2可以尽快得到cpu时间片</code>)。值得注意的是不管怎样在这两种情形(<code>译注：即是否先解锁再signal/boadcast这两</code>)中，当T1正在修改谓词的时候优先级倒置都可能会发生（<code>译注：根据我的理解，这种调度结果是正常的，毕竟P3&gt;P1，但如果有优先级置顶或者优先级继承协议的话，可以避免这种情况</code>）.</p>
-
-<p>最后一个是，当T3阻塞在mutex上的情形。我么已经在之前分时调度的章节（<code>译注：解锁mutex后signal小节</code>）讨论过了。如果T1在唤醒T2之前解锁，T3将会获得CPU时间片。在拦截唤醒的例子中，条件被修改后本应该T2处理的却被优先级更低的T3给处理了（<code>译注：这个例子强调的是倒置之后本应T2等待的谓词，被T3抢走了，T2继续阻塞</code>）。另一个线程即将修改谓词并且最终会通知等待在条件变量上的线程例子中，我们同样再次被潜在的不受限制的优先级倒置影响。</p>
-
-<p>根据之前的解释，我们相信在要想实时调度的结果可预测(<code>译注：不可预测其实还是蛮严重的，毕竟会导致任务错过deadline</code>)，signal/broadcast之后解锁mutex是必须的。这种判断应该有所节制，我从来没有经历过必须强制执行可预测性的情形。总是有可能去修改设计，所以先解锁未尝不可。事实上，David Butenhof 在最近的文章中写道，在SUS标准中的实时可预测陈述本质上是政治而不是技术[4]。但这已经被实时工作组的成员追捧起来，并且为了避免投票过程中潜在的反对也已经在SUS标准稳定下来。</p>
-
-<h3>一个陷阱 （A Trap）</h3>
-
-<p>存在一个案例，如果你先unlock会令你陷入问题中。你必须确保当你解锁mutex之后你所signal/broadcast的条件变量依旧引用的是一个有效的条件变量。这听起来似乎是显而易见的，但是在实践中一直确保这一点并不轻松[5]. 特别的，如果正在被唤醒的线程中销毁条件变量（亦或者条件变量所在的内存）则需要拉响警报了。</p>
-
-<p><a href="http://www.domaigne.com/blog/wp-content/plugins/wp-codebox/wp-codebox.php?p=33&amp;download=cv_02.c">Download cv_02.c</a></p>
-
-<p>上述程序运行在至少双核的机器上，在反复几千次后被SIGSEGV信号所终止。问题在56-59行。问题发生在在负责停止的线程发现nthread为0时会销毁条件变量，但是稍后在线程池中的线程会尝试signal已经不存在的条件变量。如果我们先signal然后再解锁，程序运行就不会有问题。</p>
-
-<h3>结论</h3>
-
-<p>我个人选择在持有mutex的情况下进行signal/boadcast.首先，我可以避免一些晦涩的bug。其次，这样做在使用wait morphing优化实现的pthread中几乎没有性能影响。再者，更重要的一点，我认为当且仅当经过分析有明显的性能提升时才会将解锁放在signal/boadcast之前。对瓶颈没有贡献的优化是没有意义的。</p>
-
-<h3>引用以及推荐阅读</h3>
-
-<ul>
-<li>[1] David R. Butenhof: Programming with POSIX Threads, section 3.3.3, pp 82-83, Addison-Wesley, ISBN-13 978-0-201-63392-4.]</li>
-<li>[2] <a href="https://www.akkadia.org/drepper/futex.pdf">Ulrich Drepper. Futexes Are Tricky</a>. A paper about futex, the Linux kernel object behind condition variable. See in particular the Chapter 8 “Optimizing Wakeup” on page 9-10.</li>
-<li>[3] <a href="http://www.cs.rice.edu/~mgricken/teaching/402/09-spring/readings/PriorityInversion.html">Kyle &amp; Bill Renwick. How to use priority inheritance</a>. An excellent article from embedded.com about priority inversion and possible cures.</li>
-<li>[4] <a href="https://groups.google.com/forum/#!topic/comp.programming.threads/wEUgPq541v8">basic question about concurrency</a>. A discussion thread on c.p.t, where David Butenhof explains what the “predictable scheduling” statement in the SUS standard means and where it comes from.</li>
-<li>[5] <a href="http://groups.google.de/group/comp.programming.threads/browse_thread/thread/23dd5883dc36d14a/7e5fcdf360543375">A word of caution when juggling pthread_cond_signal/pthread_mutex_unlock</a> . A post from Bryan Ischo on c.p.t. that shows a subtle bug when unlocking before signaling.</li>
-</ul>
-
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Google File System 笔记]]></title>
-    <link href="http://1feng.github.io/2016/07/08/google-file-system-summary/"/>
-    <updated>2016-07-08T15:47:00+08:00</updated>
-    <id>http://1feng.github.io/2016/07/08/google-file-system-summary</id>
-    <content type="html"><![CDATA[<hr />
-
-<h3>创新点</h3>
-
-<ul>
-<li>把组件故障当做常态，而不是异常。即，要有完备的监控，错误检测，故障恢复机制</li>
-<li>通常文件都是巨大的，数以GB是常态</li>
-<li>多数文件的修改是追加新数据，而不是覆盖已有数据</li>
-<li>综合应用以及系统API一起来设计，从而增加整个系统的灵活性</li>
-</ul>
-
-
-<h3>设计假设</h3>
-
-<ul>
-<li>整个系统构建在许多廉价的商用组件之上，所以故障是在所难免的</li>
-<li>系统存储了适当数量（几千万）的大文件，大小从几百MB到数以GB不等</li>
-<li>读操作通常包含大量的流式读取，和少量的随机读。应用可以通过对小的读取操作组合排序成批量操作从而提高效率</li>
-<li>写操作通常是许多大量的顺序的写来追加数据到文件里</li>
-<li>对于多client向同一文件并发append的情况，系统必须有效实现一套明确定义的规则</li>
-<li>持续的高带宽比低延迟更重要</li>
-</ul>
-
-
-<h3>接口</h3>
-
-<p>只支持了一些常规的create，delete，open，close，read 以及 write接口，并没有支持POSIX标准的接口</p>
-
-<h3>架构</h3>
-
-<h4>整体架构图</h4>
-
-<p><img src="/images/blog_images/gfs01.jpg" alt="" /></p>
-
-<ul>
-<li>系统整体由master，chunkservers，client三部分组成</li>
-<li>文件的存储单元为chunk，chunk size = 64M(一般FS也就kb级别)，默认每个chunk有3个备份（可配置）
-
-<ul>
-<li>大chunksize的优点：
-
-<ul>
-<li>可以利用client的cache，有效减少client同master的交互</li>
-<li>意味着client能够在同一个chunkserver上执行更多的操作，节省了网络开销(如果chunksize过小，极端情况下一次数据读取要和多个chunkservers进行交互)</li>
-<li>大的chunk size 可以有效减少master上metadata的存储量</li>
-</ul>
-</li>
-<li>大的chunksize的缺点：
-
-<ul>
-<li>如果某个chunk 的访问过热，单机就会变为热点
-
-<ul>
-<li>解决方案：优化业务 or 允许client从其他client获取数据</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-<li>只有一个master角色，用以存储文件的元数据信息，同时这些元数据信息会备份在多个远程机器上</li>
-<li>Master通过HeartBeat与chunkservers保持通讯</li>
-</ul>
-
-
-<h4>数据一致性模型</h4>
-
-<blockquote><p>GFS放宽了数据的一致性模型，从而降低系统的复杂度以及可以高效的实现</p></blockquote>
-
-<h5>Namespace</h5>
-
-<ul>
-<li>Namespace的修改（例如文件创建，重命名）操作是原子性的</li>
-</ul>
-
-
-<h5>File Region State</h5>
-
-<ul>
-<li>File Region的状态取决于其修改的类型以及操作结果（成功与否），如图：
-
-<ul>
-<li><img src="/images/blog_images/gfs03.jpg" alt="" /></li>
-<li>Consisitent：不管从哪个replica读取数据，client看到的都是相同的数据</li>
-<li>Inconsistent:  一般由操作失败引起</li>
-<li>Defined：当一个改动操作完成，数据是consistent状态，并且client可以看到改动的内容</li>
-<li>Undefined：
-
-<ul>
-<li>并发操作存在相互影响时，数据虽然是consistent状体，但是无法看出每个client的修改（<code>例如并发的在同一个位置写入两次</code>）</li>
-<li>inconsistent</li>
-</ul>
-</li>
-</ul>
-</li>
-<li>概念区分（mutation）：
-
-<ul>
-<li>write: 向application指定的位置写入数据，offset由application指定</li>
-<li>record append：即使并发操作情形，也会保证append  atomically at leaset once，offset是GFS选择的</li>
-</ul>
-</li>
-<li>How to：
-
-<ul>
-<li>Success:
-
-<ul>
-<li>通过确保mutations的顺序在所有的replicas上一致来保证defined</li>
-<li>使用chunk version number来检测旧的数据(某chunksever宕机时，mutation依旧会Success，然后导致旧数据产生)</li>
-</ul>
-</li>
-<li>Failure:
-
-<ul>
-<li>利用Master和chunkservers的心跳以及数据的checksum来检测操作失败生成的脏数据（通过其他replicas来恢复）
-
-<h5>Applications</h5></li>
-</ul>
-</li>
-</ul>
-</li>
-<li>通过以下技术手段，application可以迁就GFS的较为放松的一致性模型
-
-<ul>
-<li>relying on appends rather than overwrites</li>
-<li>checkpointing</li>
-<li>writing self-validating</li>
-<li>self-identifying</li>
-</ul>
-</li>
-<li>场景举例：
-
-<ul>
-<li>场景一： writer创建一个文件，并且从开始到结束（<code>写满即结束？</code>）一直持有这个文件，当数据写完，文件会被writer被重命名为一个permanent name; 或者，writer周期性的通过checkpoint记录写入成功了多少（<code>不太明白啥意思</code>）
-
-<ul>
-<li>checkpoint可以包含application级别的校验码(checksum)</li>
-<li>reader只会检验和处理那些和checkpoint对比最新的file region，即defined状态的数据</li>
-<li>checkpoint可以允许writer增量重启并且让reader继续处理那些在application看来还未完成的数据</li>
-<li>不管是并发还是一致问题，当前这个场景都可以较好的应对</li>
-</ul>
-</li>
-<li>  场景二: 利用多路归并合，或者通过生产者消费者队列完成多个writer并发的append
-
-<ul>
-<li>  readers 处理偶然的padding和重复，如下：
-
-<ul>
-<li>由writer对写入的record增加额外的checksum</li>
-<li>由reader通过checksum来剔除掉额外的padding数据或者其他record fragments</li>
-<li>如果reader可以容忍偶然的重复（例如触发了非幂等的操作），可以通过唯一标识来剔除掉重复</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-
-
-<h4>Master</h4>
-
-<p><img src="/images/blog_images/GFS02.png" alt="" /></p>
-
-<blockquote><p>上图为根据论文猜测的结构，比如location可能并不是以这种方式存储的，也有可能是通过所谓的chunk namespace来获取</p></blockquote>
-
-<h5>DATA</h5>
-
-<ul>
-<li><strong>Namespace</strong>
-
-<ul>
-<li>存储位置：disk + memory</li>
-<li>File Namespace：
-
-<ul>
-<li>启动时加载自Operation log</li>
-<li>数据结构为前缀压缩的lookup table，通常小于64byte</li>
-<li>namespace tree 的每个节点（node）都有一个关联的读写锁</li>
-<li>namespace的修改为原子操作（atomic）</li>
-</ul>
-</li>
-<li>Chunk namespace: <code>如果也是前缀压缩来实现，就解释不过去了，想不出chunk namespace有什么用</code>
-
-<ul>
-<li>论文中仅有两次提及，具体不详</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>Access control information</strong>
-
-<ul>
-<li>存储位置：disk + memory</li>
-<li>备注： 文中较少提及，具体不详</li>
-</ul>
-</li>
-<li><strong>Mapping from files to chunks</strong>
-
-<ul>
-<li>存储位置：disk + memory</li>
-<li>详解：
-
-<ul>
-<li>每个文件都被切分为了固定大小的chunk，master里仅存放chunk handle 以及 location</li>
-<li>chunk handle 是个64bit的唯一标示（猜测是hash获得的,但是为什么不是chunknumber？）</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>Current locations of chunks</strong>
-
-<ul>
-<li>存储位置：memory</li>
-<li>详解：
-
-<ul>
-<li>通过询问chunkserver获取，一般在启动或者有新chunkserver加入等情况下发生</li>
-<li>与client交互时会把client请求的chunk的所有location都返回，由client自己决定（就近）与哪个chunkserver交互</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>Operation log</strong>
-
-<ul>
-<li>存储位置：disk</li>
-<li>详解：
-
-<ul>
-<li>存放了关键元数据的改动记录</li>
-<li>数据同时备份在remote machines上</li>
-<li>只有在数据刷新到磁盘上时，才响应client</li>
-<li>利用log replay来完成灾难恢复</li>
-<li>当日止文件超过一定大小，master会记录checkpoint（使用额外线程，不阻塞当前mutation）</li>
-<li>B-tree结构存储（可以直接被加载进内存）的checkpoint，方便快速定位，恢复
-
-<h5>功能</h5></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>Namespace Management and Locking</strong>
-
-<ul>
-<li>简介：仅用于处理master内部操作(master's operations)并发冲突</li>
-<li>例子：我们在对/home/user目录进行snapshot的时候，如何避免同一时间创建/home/user/foo操作
-
-<ul>
-<li>绿色R代表获取读锁，红色W代表获取写锁</li>
-<li><img src="/images/blog_images/GFS_lock.png" alt="" /></li>
-<li>如图：当create操作获取/home/user的读锁时，只能等到其他操作释放掉写锁才能继续</li>
-<li>create操作不需要对父层目录（/home/user）加写锁,仅需要加读锁，防止该目录被删除即可</li>
-</ul>
-</li>
-<li>注意：为了避免死锁，加锁是先按照namespace tree的level顺序进行的，同level按照字典序</li>
-</ul>
-</li>
-<li><strong>Replica Placement</strong>
-
-<ul>
-<li>简介：处理chunk replica placement，从而保证scalability，reliability， and availability</li>
-<li>目的：最大化数据的可靠性和可用性，同时最大利用化带宽</li>
-<li>策略：不仅仅是跨机器，同时需要跨机架(racks)
-
-<ul>
-<li> 优点: 是充分保证了可靠性和可用性，同时读操作可以有效利用多机架的带宽资源</li>
-<li> 缺点: 是跨机架(racks)同样带来的弊端就是写操作时，数据流向不得不得跨机架</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>Creation, Re-replication, Rebalancing</strong>
-
-<ul>
-<li>简介：chunk replicas 只在三种情况下被创建：chunk creation, re-replication, and rebalancing</li>
-<li>Creation（where to place the initially empty replicas）：
+    <title type="html"><![CDATA[Read-Only 的 linearizability]]></title>
+    <link href="http://1feng.github.io/2017/06/16/smarter/"/>
+    <updated>2017-06-16T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/16/smarter</id>
+    <content type="html"><![CDATA[<blockquote><p><a href="https://github.com/1Feng/learn-distributed-systems/blob/master/practice/storage/others/SMARTER/Bolosky.pdf">《Paxos Replicated State Machines as the Basis of a High-Performance
+Data Store》</a> 介绍了使用了paxos算法进行副本同步，这里仅总结如何保证read-only操作的linearizability</p></blockquote>
+
+<h2>How</h2>
 
 <ol>
-<li>放在磁盘空间利用低于所有chunkservers均值的chunkserver上</li>
-<li>限制单个chunkserver最近创建数(如果数字过高，意味着chunkserver会迎来一波大量的写操作)</li>
-<li>跨机架(racks)存放</li>
+<li>收到read-only请求后，记录下一个slot number</li>
+<li>slot number = max(已经commit的最大的operation number VS 当前节点成为leader后re-proposed最大的operation number)</li>
+<li>向所有replicas发送消息，检查是否有新leader出现（即检查当前节点是否扔是合法leader）</li>
+<li>如果加上自身有总数过半的节点仍然认为当前节点是leader则继续，否则丢弃请求</li>
+<li>将请求连同1中记录的slot number转发到任意replica（最好是3中回复确认的的replica），称之为replica A</li>
+<li>replica A等待slot number被执行，之后检测是否有新的paxos configuration被选择，如果有则丢弃请求，否则执行read操作返回结果</li>
 </ol>
-</li>
-<li>Re-replication:
+
+
+<h2>Why</h2>
+
+<p>最简单的保证linearizability的read-only的方法是将read-only操作当做写操作一样走一遍paxos流程，但是这样读的性能太低了，并且会导致leader压力巨大</p>
+
+<p>论文中提出的方法省去了走paxos流程的磁盘IO，仅一次广播检测确认leader角色，并将真正的读操作转移到了replica上</p>
+
+<p>那么如何证明呢？</p>
+
+<ol>
+<li>read-only linearizability需要保证的是在这个请求到达之前已经成功提交的写入都应该被本次读取看到</li>
+<li>我们将read-only request 到来之前已经成功提交的最后一条写入的operation number为 N，则有以下三种情况：</li>
+<li>N 是前一个leader提交的</li>
+<li>N 是当前节点成为leader后提交的</li>
+<li>当前节点早已经不是leader， N其实是后续leader提交的</li>
+<li>我们只需保证slot number >= N即可保证linearizability</li>
+<li>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</li>
+<li>N是当前leader提交的，那么一定有slot number >= N</li>
+<li>该情况请求会被丢弃，slot number不需要保证大于等于N</li>
+</ol>
+
+
+<h2>Extension</h2>
+
+<p>TIDB中在使用raft做数据同步的情况下，也使用了一个类似的<a href="https://zhuanlan.zhihu.com/p/25367435">方法</a>来保证read-only的linearizability：</p>
+
+<blockquote><p>当 leader 要处理一个读请求的时候：
+1. 将当前自己的 commit index 记录到一个 local 变量 ReadIndex 里面。
+2. 向其他节点发起一次 heartbeat，如果大多数节点返回了对应的 heartbeat response，那么 leader 就能够确定现在自己仍然是 leader。
+3. Leader 等待自己的状态机执行，直到 apply index 超过了 ReadIndex，这样就能够安全的提供 linearizable read 了。
+4. Leader 执行 read 请求，将结果返回给 client。</p></blockquote>
+
+<p>其中：</p>
+
+<blockquote><p>实现 ReadIndex 的时候有一个 corner case，在 etcd 和 TiKV 最初实现的时候，我们都没有注意到。也就是 leader 刚通过选举成为 leader 的时候，这时候的 commit index 并不能够保证是当前整个系统最新的 commit index，所以 Raft 要求当 leader 选举成功之后，首先提交一个 no-op 的 entry，保证 leader 的 commit index 成为最新的。</p></blockquote>
+
+<p>与本文中<code>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</code>是类似的（raft毕竟是paxos的变种）</p>
+
+<p>另外一种方式就是TIDB根据raft论文实现的lease的方式：</p>
+
+<blockquote><p>在 Raft 论文里面，提到了一种通过 clock + heartbeat 的 lease read 优化方法。也就是 leader 发送 heartbeat 的时候，会首先记录一个时间点 start，当系统大部分节点都回复了 heartbeat response，那么我们就可以认为 leader 的 lease 有效期可以到 start + election timeout / clock drift bound 这个时间点。</p>
+
+<p>为什么能够这么认为呢？主要是在于 Raft 的选举机制，因为 follower 会在至少 election timeout 的时间之后，才会重新发生选举，所以下一个 leader 选出来的时间一定可以保证大于 start + election timeout / clock drift bound。</p></blockquote>
+
+<h2>Referrence</h2>
+
+<ol>
+<li><a href="https://zhuanlan.zhihu.com/p/25367435">TiKV 源码解析系列 - Lease Read</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[CAP 问题]]></title>
+    <link href="http://1feng.github.io/2017/06/08/cap/"/>
+    <updated>2017-06-08T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/08/cap</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>于2002年提出的CAP理论（三选二的方式来评估分布式系统）确实为分布式系统领域的发展提供了指导价值，但是就今天而言，这套理论已经意义微小了</p></blockquote>
+
+<h2>Consistent</h2>
+
+<p>这里的一致性指的是强一致，又称<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/consistency/linearizability">linearizable</a>或atomic。</p>
+
+<p>论文中的描述如下：</p>
+
+<blockquote><p>Under this consistency guarantee, there must exist a total order on all operations such that each operation looks as if it were completed at a single instant.</p></blockquote>
+
+<p>简单来讲就是如果把分布式系统看做一个黑盒，在外部看起来这个系统就是和单机没有区别。</p>
+
+<p>具体的来说：</p>
+
+<blockquote><p>任意的一条读操作R，如果发生在某条写操作W完成之后，那么R读到的要么是W的内容，要么是W之后的写操作写入的内容</p></blockquote>
+
+<p>更详细的描述可以参考<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/consistency/linearizability">linearizable</a></p>
+
+<p>这里的consistent 和 ACID中的consistent是完全不同的概念：
+- ACID-consistent特指事务
+- CAP-consistent仅仅是请求/响应操作顺序的属性</p>
+
+<h2>Available</h2>
+
+<p>论文中的定义：</p>
+
+<blockquote><p>For a distributed system to be continuously available, every request received
+by a non-failing node in the system must result in a response</p></blockquote>
+
+<p>这里的response是指no-error response</p>
+
+<p>即使是Probabilistic availability，在任意的failures发生时也不会影响针对CAP-available的结论，但是这里为了简单起见特指100% availability。</p>
+
+<p>如果专门针对partition-tolerance而言的话，available可以描述为：</p>
+
+<blockquote><p>even when severe
+network failures occur, every request must terminate.</p></blockquote>
+
+<p>terminate 是指任意使用该分布式系统的算法都会终止，注意是算法的终止。</p>
+
+<h2>Partition Tolerance</h2>
+
+<blockquote><p>网络割接和交换机故障都会造成network partition</p></blockquote>
+
+<p>network partition 图示:</p>
+
+<p><img src="/images/blog_images/cap/network-partition.png" alt="" /></p>
+
+<p>CAP的问题也是从这里开始体现：</p>
 
 <ul>
-<li>when:  当可用的replicas数低于用户指定的数（默认为3）时
+<li>partition tolerance并非和CA对等的属性，而是一种因果的关系：partition发生时是选A还是选C，即如何去tolerant partition，</li>
+<li>分布式系统需要考虑的其他<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/unreliable-network">网络问题</a>也很多，包括延迟，网络不可靠等，并不仅仅是partition，所以使用CA,CP,AP去描述一个分布式系统并不完整</li>
+<li>很多分布式系统可以根据业务需求降低对consistent的要求，降低对available的要求，所以根本无法用CAP来描述</li>
+</ul>
+
+
+<h2>Partition in practice</h2>
+
+<blockquote><p>尽管network partition不能涵盖分布式系统所有需要面对的网络问题，但是它确实是网络问题中的一个难点和重点</p></blockquote>
+
+<h3>single-leader-Architecture</h3>
+
+<p><img src="/images/blog_images/cap/single-leader.png" alt="" /></p>
+
+<p>当某个client和leader处于不同partition时，此时CAP-available丢失，如果按照CAP理论，只能称之为CP</p>
+
+<h3>multi-leader-Architecture</h3>
+
+<p><strong>情景一</strong></p>
+
+<p><img src="/images/blog_images/cap/multi-leader-c.png" alt="" /></p>
+
+<p>某个client和所有的leader都不在一个partition，此时CAP-available丢失，如果按照CAP理论，只能称之为CP</p>
+
+<p>如果你允许（业务上允许）图示中的client2对replica进行read操作，则CAP-consistent也会丢失，只能称之为P（CAP的3选2现在成了3选1）</p>
+
+<p><strong>情景二</strong></p>
+
+<p><img src="/images/blog_images/cap/multi-leader.png" alt="" /></p>
+
+<p>leaders不在一个partition，此时CAP-consistent丢失，如果按照CAP理论，只能称之为AP</p>
+
+<h3>dynamo-style-Architecture(no-leader)</h3>
+
+<p><img src="/images/blog_images/cap/dynamo-style.png" alt="" /></p>
+
+<p>R + W > N,但是当network partition发生时，如果某个client被划分到了节点较少的一侧，那么CAP-available丢失，只能称之为CP；</p>
+
+<p>如果你允许（业务上允许）图示中的client2进行read操作，则CAP-consistent也会丢失，只能称之为P（CAP的3选2现在成了3选1）</p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html"> Martin Kleppmann. please-stop-calling-databases-cp-or-ap</a></li>
+<li><a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》9.Linearizability</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[What is ACID]]></title>
+    <link href="http://1feng.github.io/2017/06/07/ACID/"/>
+    <updated>2017-06-07T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/07/ACID</id>
+    <content type="html"><![CDATA[<h1>What</h1>
+
+<h2>Atomicity</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一个事务包含一系列的操作，这一系列的操作都成功，则意味着事务执行成功；一旦执行过程中发生故障(fault)，数据库需要放弃整个事务，并且撤销已经完成的部分操作</p>
+
+<p><strong>优势</strong>：</p>
+
+<p>方便异常处理，如果事务终止，应用层面可以确保什么修改都没有发生，可以安全的重试</p>
+
+<p><strong>典型案例</strong>：</p>
+
+<p>A向B账户转账100元：
+ 1. 从A的账户减少100元
+ 2. 从B的账户增加100元</p>
+
+<p>如果1执行完成2还未执行，此时数据库故障(<code>system fails</code>)，则为了保证Atomicity，数据库的事务系统需要回滚1操作</p>
+
+<p><strong>其他</strong>：</p>
+
+<blockquote><p>这里需要与concurrency-atomic做一下区分, concurrency-atomic指的是当某个线程执行某个操作时，其他线程不可能看到中间状态(half-finished)</p></blockquote>
+
+<h2>Consistency</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>这里的consistency是指，当事务结束时，系统（数据库）处于一个合法的状态(valid state),也就是说系统总是从一个合法的状态迁移至另一个合法的状态</p>
+
+<p><strong>其他</strong>：</p>
+
+<ol>
+<li>ACID-consistency是一个比较模糊的概念，状态迁移是系统的用户来保证的，系统只能保证其中一部分，不能完全覆盖，所以consistency依赖用户而不是系统</li>
+<li>MSDN给出的例子<a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">[2]</a>和Atomicity类似，但是差别在于A中事务终止回滚时因为system fails，而C中事务终止回滚是因为error（比如类型不匹配，数字和字符串做加法？）</li>
+<li>ACID-consistency 和CAP-consistency直接没有任何关系，仅仅使用了同一个单词而已</li>
+</ol>
+
+
+<h2>Islation</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>Isolation是指当多个事务并发(concurrency)执行时，应该彼此之间存在隔离，执行过程中互不影响</p>
+
+<h2>Durability</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一旦事务成功提交，即使发生硬件故障或者程序崩溃，任何已经写入的数据都不能丢失</p>
+
+<h1>How</h1>
+
+<h2>Atomicity ★★★★</h2>
+
+<p>可以利用持久化日志来实现，方便重启回滚</p>
+
+<h2>Consistency ★★</h2>
+
+<p>数据库层面做足够的合法性检测，其他由用户层/应用层来保证</p>
+
+<h2>Islation ★★★★★</h2>
+
+<p><strong>先看几点要求</strong>：</p>
 
 <ul>
-<li>chunkservers unavailable</li>
-<li>chunkservers report its replica corrupted（disk fail，error...）</li>
-<li>用户指定的replicas数进行了提升</li>
+<li>Read commited（weak-islation type） 的两点要求
+
+<ul>
+<li>No Dirty Read: 不会读取到其他正在执行的事务中间状体的数据</li>
+<li>No Dirty Write: 事务不会overwrite到其他事务的uncommitted的数据</li>
 </ul>
 </li>
-<li>where: 同Creation（此处限制的是单个chunkserver当前active clone操作的数）</li>
-</ul>
-</li>
-<li>Rebalance：
+<li>No Read Skew：
 
 <ul>
-<li>对象：当前的replicas分配策略，以及移动已有的replicas</li>
-<li>目标:  获得较佳的磁盘使用率和负载均衡</li>
-<li>方式：定期的，缓慢进行（避免新的chunkserver一下负载大量写操作）</li>
-<li>策略：(选机器而不是选replica) 选择当前的磁盘剩余低于所有chunkservers均值的机器，对其replica进行move操作，从而均衡磁盘使用率</li>
+<li>Read Skew举例：
+
+<ul>
+<li>A 在两个账户中各存放了500块钱，现在A要查询两个账户的余额</li>
+<li>查询账户1的SQL执行完成，余额500</li>
+<li>假设A之前设置了一笔定时的自动转账被触发，从账户2向账户1转100块，事务执行成功，账户1余额600，账户2余额400</li>
+<li>查询账户2的SQL执行完成，余额400</li>
+<li>在A看来，账户总额少了100块</li>
+<li>即使如此这个场景还是可以接受的，因为A可以重新查询，即可获得正常结果</li>
+</ul>
+</li>
+<li>无法接受Read Skew的两个场景：
+
+<ul>
+<li>Backup
+
+<ul>
+<li>事务执行的同时，可以完成数据备份</li>
+</ul>
+</li>
+<li>Analytic Queries and Integrity checks
+
+<ul>
+<li>事务执行的同时, 需要完成大量数据的查询或扫描</li>
 </ul>
 </li>
 </ul>
 </li>
-<li><strong>Garbage colleciton</strong>
+</ul>
+</li>
+<li>Read-Modify-Write / Atomic Write Operation
 
 <ul>
-<li>简介：GFS的文件删除是一种lazy的方式，依赖定期垃圾回收来回收磁盘物理空间，回收包括file级别和chunk级别</li>
-<li>机制：
+<li>举例：两个用户同时对一个counter字段做inc操作，后果与多线程并发操作类似会丢失一部分inc操作</li>
+</ul>
+</li>
+<li>Write Skew
 
 <ul>
-<li>对于要删除操作，修改文件名为隐藏的名字(hidden name,猜测就像linux带.前缀的文件名)，同时文件名带有删除时间戳</li>
-<li>定期扫描file namespace，发现如果这种文件存在超过指定时间(默认三天)则执行删除操作，同时删除其metadata</li>
-<li>定期扫描chunk namespace（<code>chunk 的 namespace是什么结构，有什么意义??</code>）
+<li>举例（针对multi-object的场景）：
 
 <ul>
-<li>标记那些失效的chunk(对应的文件已不存在)，删除其metadata</li>
-<li>同时利用和chunkservers的HeartBeat传递的信息，chunkservers会报告其持有的chunk集合，对比，告知其持有的chunk那些需要删除</li>
+<li>两位医生Alice 和 Bob同时检查当前是否有另外一个人正在值班，如果有则在系统中停止自己的值班状态，然后回家睡觉
+``` sql
+Alice执行事务如下：
+currently_on_call = (select count(*) from doctors where on_call = true and shift_id = 1234)
+if (currently_on_call >= 2) {
+  update doctors set on_call = true where name=‘Alice’ and shift_id = 1234
+}</li>
+</ul>
+
+
+<p>Bob执行事务如下：
+currently_on_call = (select count(*) from doctors where on_call = true and shift_id = 1234)
+if (currently_on_call >= 2) {</p>
+
+<pre><code>update doctors set on_call = true where name=‘Bob’ and shift_id = 1234
+</code></pre>
+
+<p>}</p>
+
+<p>有点像是multi-object版本的read-modify-write，但是有本质区别
+```</p></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>解决方案</strong>：</p>
+
+<ul>
+<li>Read commited
+
+<ul>
+<li>Dirty Write: 可以使用row-level lock来避免dirty write</li>
+<li>Dirty Read:
+
+<ul>
+<li>同样可以使用row-level lock来避免dirty read,但是缺点在于一个比较耗时的写操作会阻塞住read-only的操作，更严重的是会因此引发连锁反应</li>
+<li>更好的解决方法是使用类似于MVCC的snapshot-isolation方案来解决dirty read的问题</li>
 </ul>
 </li>
 </ul>
 </li>
-<li>优点：
+<li>No Read Skew
 
 <ul>
-<li>增强了系统的容错性，失败操作造成的一些垃圾chunk，会通过此机制回收</li>
-<li>回收操作整合进了master的后台操作和与chunkservers的handshakes中，回收动作得以批量进行，整体开销被分担</li>
-<li>这种延迟删除的机制，同时避免了偶然和不可逆的删除操作</li>
+<li>类似于MVCC的snapshot-isolation方案来解决read skew问题，可同时满足Backup和Analytic Queries and Integrity checks的需求</li>
+</ul>
+</li>
+<li>Read-Modiry-Write / Atomic Write Operation
+
+<ul>
+<li>使用显示的锁操作(explicit-locking)来实现atomic write operation</li>
+<li>automatically-detecting-lost-update，一旦检测到lost update，事务需要终止并且retry</li>
+<li>实现compare-and-set操作用以支持SQL-where语句</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>串行化（serializability）隔离所有事务，这种方式可以解决上述除read skew外所有问题，但是工程实现上往往性能会是一个非常大的问题</li>
+</ul>
+</li>
+</ul>
+
+
+<blockquote><p>通常为了实现isolation，都是综合以上各种方案</p></blockquote>
+
+<h2>Durability ★★★★</h2>
+
+<p>磁盘+replica</p>
+
+<h1>Serializability</h1>
+
+<h2>What</h2>
+
+<blockquote><p>serializable-isolation 是最强等级的事务并发隔离，他可以确保即使多个事务是并行(parallel)执行的,最终的结果看起来也像是顺序的（serially），每个时间点只有一个事务在执行</p></blockquote>
+
+<h2>How</h2>
+
+<blockquote><p>根据上述描述，不难看出，其要求是让数据库解决所有的可能的并发竞争问题</p></blockquote>
+
+<ul>
+<li>真的串行化的执行事务：</li>
+<li>方法：将所有的事务扔到一个队列里排队，由特定的线程来依次执行</li>
+<li>缺点：性能太差</li>
+<li>存储过程（stored procedures）+ in-memory data：</li>
+<li>解释：本质是加快单个事务的执行速度（没有了磁盘IO），以便可以真正串行化事务执行</li>
+<li>缺点：存储过程需要用户自己来用SQL/PL完成，调试测试监控都比较棘手，同时一旦用户完成的存储过程性能比较差，会造成恶劣的影响，甚至引发连锁反应</li>
+<li>数据分区(partitioning)</li>
+<li>解释：本质是将单机的性能问题通过scale out来加速</li>
+<li>缺点：事务执行涉及的数据不能跨分区</li>
+<li>Two-Phase-Locking(2PL)</li>
+<li>描述：
+
+<ul>
+<li>当事务需要读一个object时，必须先以shared mode获取锁；多个事务可以同时以shared mode获取锁，但是一旦有事务以exclusive mode持有了锁，其他事务必须等待</li>
+<li>如果事务想要写一个object，必须先以exclusive mode获取锁；区别于shared mode，同一时间只能有一个事务以exclusive mode持有锁</li>
+<li>如果事务先读一个object，然后又要写（read-modify-write）,则需要将锁从shared mode升级为exclusive mode</li>
+<li>一旦事务获取了锁，除非事务提交或者终止，否则不允许释放锁，这也是二阶段命名的由来；</li>
+</ul>
+</li>
+<li>解释：
+
+<ul>
+<li>Expanding phase（扩大阶段--事务执行中）: locks are acquired and no locks are released.</li>
+<li>Shrinking phase（收缩阶段--事务结束时）: locks are released and no locks are acquired.</li>
 </ul>
 </li>
 <li>缺点：
 
 <ul>
-<li>浪费了存储空间，用户无法通过删除操作来立即释放空间</li>
-<li>解决方法：
+<li>吞吐量(through-put) 和 响应时间 与仅实现weak-isolation(如read-commit + No Read Skew)相比会比较差</li>
+<li>deadlock风险增大</li>
+</ul>
+</li>
+<li>Serializable Snapshot Isolation(SSI)</li>
+<li>与之前提到的snapshot-isolation相比，SSI为写操作增加了串行(serialization)冲突检测
 
 <ul>
-<li>用户如果对于已经删除的文件再一次进行删除，系统将加快其回收的速度</li>
-<li>允许用户对不同的namespace制定不同的回收策略，以及复制策略（例如不进行备份/复制，其删除操作立即执行）</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>Stale Replica Detection</strong>
-
-<ul>
-<li>定义：由于操作失败，或者chunkserver宕机造成chunk的修改没有被同步，形成了Stale Replica</li>
-<li>方案：
-
-<ul>
-<li>master持有chunk version number来区分某个chunk是否是旧的, 并通过垃圾回收机制来回收stale replica</li>
-<li>通过client的cache 超时时间以及重新打开文件来尽量限制client读取到过期数据（<code>文中区分了早期(premature)和过期(outdated)数据，某些业务场景读到premature数据应该是可以的</code>）</li>
-</ul>
-</li>
-</ul>
-</li>
+<li>detecting stale MVCC reads：针对write skew，如果事务提交时检测到之前的前置条件已经不成立了，则终止事务</li>
+<li>detecting writes that affect prior read：同样考虑write skew，数据库从index-level/table-level保存一些信息，以便当事务提交后可以检测其操作是否造成其他正在执行的事务读取的数据过期（前置条件失效），如果存在则主动通知该事务终止</li>
 </ul>
 </li>
 </ul>
 
 
-<h4>系统交互</h4>
-
-<blockquote><p>系统的整体设计旨在降低master的参与度，毕竟它是整个分布式系统中唯一一个单点，很容易形成瓶颈</p></blockquote>
-
-<h5>租契(leases)和改动顺序(mutation order)</h5>
+<h2>Serializability VS Linearizability</h2>
 
 <ul>
-<li><strong>背景</strong>：一条修改操作要在所有的chunk replicas上执行，我们使用租契(leases)来管理这个修改顺序</li>
-<li><strong>描述</strong>：
+<li>serializability： 事务隔离的属性，指事务执行的结果看起来像顺序的（串行的），以避免write skew</li>
+<li>linearizability： 指对读写共享数据的新近性（recency guarantee），与事务（把一系列操作看做整体来讨论）无关</li>
+</ul>
+
+
+<h1>References</h1>
+
+<p>[1]. <a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》7.Transactions</a></p>
+
+<p>[2]. <a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">ACID properties</a></p>
+
+<p>[3]. <a href="http://www.bailis.org/blog/linearizability-versus-serializability/Linearizability">Linearizability versus Serializability</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[unreliable network]]></title>
+    <link href="http://1feng.github.io/2017/06/06/unreliable-network/"/>
+    <updated>2017-06-06T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/06/unreliable-network</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>众所周知TCP是可靠的网络传输协议，但是为什么在分布式系统中又认为网络是不可靠的呢？通常有以下两点：
+1. 发送方无法确定接收方已经收到请求
+2. 发送方无法无法知晓接收方是否处理完请求</p>
+
+<p>可以看出，以上指的都是从应用层的角度观察的结果，而引起以上问题的原因可能有：
+- 消息在路由队列中等待转发
+- 接收方队列满，发生丢包
+- 接收方处理完成，回复的消息在排队或发生丢包
+- gc-stop-the-world等</p></blockquote>
+
+<h2>Synchronous network</h2>
+
+<p>像电话网络，有线电视网络等都是所谓synchronous network，他的特点如下：</p>
 
 <ul>
-<li>Master 向其中一个replicas发放租契(leases),该replica被称作 primary</li>
-<li>Primary 针对chunk的所有修改动作选择一系列的顺序</li>
-<li>当改动提交时，其他replicas依照primary的顺序进行</li>
+<li><p>一旦连接建立，即享用专线</p></li>
+<li><p>专线享有固定的带宽</p></li>
+<li><p>路由(routers)没有队列</p></li>
+</ul>
+
+
+<p>以上决定了synchronous network的最大网络延迟是固定有上限的，即可以用timeout来判断消息传输是否存在问题</p>
+
+<h2>Asynchronous network</h2>
+
+<p>既然有synchronous network为什么还要搞以太网这一套呢？原因是为了充分利用带宽，由于互联网上数据传输的大小都不是固定的，使用专线意味着带宽资源的浪费。</p>
+
+<p>因此，Ehernet &amp;&amp; ip 使用了packed-switched协议, 具体如下：</p>
+
+<ol>
+<li><p>路由引入队列，最大化线路使用率</p></li>
+<li><p>TCP层引入send buffer &amp;&amp; recv buffer来动态的适配数据传输速率(滑动窗口)</p></li>
+</ol>
+
+
+<p>上述的优化本质是在latency和resource utilization之间做trade-off，也因此导致了无上限的延迟时间，即无法选择一个合适的timeoout来进行传输故障检测</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[timing and order]]></title>
+    <link href="http://1feng.github.io/2017/06/05/timing-and-order/"/>
+    <updated>2017-06-05T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/05/timing-and-order</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>分布式环境面临的两个主要的问题就是网络不可靠和时钟不可靠，这里主要总结时钟问题</p></blockquote>
+
+<h2>Physical Clocks</h2>
+
+<p>我们日常使用的计算机和服务器的物理时钟都是使用的石英(quartz)时钟，这类时钟天生存在误差，虽然铯原子钟的精度更高但是造价昂贵，并不适合商用计算机。</p>
+
+<p>对于商用计算机的时钟误差，通常使用NTP协议来进行时钟同步，然而由于网络的不可靠以及时钟误差NTP同步也会有些问题。</p>
+
+<p>商用计算机利用时英时钟在计算机上实现了两种clock:</p>
+
+<ul>
+<li><p>wall clock</p>
+
+<ul>
+<li>受NTP同步的影响，时钟会jump forward 或 jump backward来完成时钟同步</li>
+<li>如linux上的int gettimeofday(struct timeval <em>tv, struct timezone </em>tz);,返回1970-01-01 00:00:00 +0000 (UTC)至今的秒数和豪秒数</li>
 </ul>
 </li>
-<li><strong>目的</strong>：降低master的管理开销</li>
-<li><strong>细节</strong>：
+<li><p>monotonic clock</p>
 
 <ul>
-<li>Lease初始的超时时间为60s，超时则意味着当前lease失效，需要master重新下发</li>
-<li>如果Lease正在被执行，即chunk正在被执行改动，primary会通过和master交互来确保Lease的超时时间可以无限扩展</li>
-<li>上述中的交互是通过Master与chunkservers的HeartBeat捎带进行的</li>
-<li>同时，Master可以在Lease过期之前予以撤销（例如撤销重命名）</li>
-<li>即使Master和Primary的通讯断开了，在当前Lease过期前，他同样可以下发给其他replica一个新的Lease</li>
-<li>如果需要write的数据太大，或者跨越单个chunk，那么该操作会被client拆分成多个write操作；
-
-<ul>
-<li>由于有多个client存在，这些操作会按照相同的顺序进行，但是其中可能会穿插其他client的操作</li>
-<li>Shared file region 尾部可能包含来自多个client(<code>concurrent write</code>)的数据段(<code>比如clientA 向offset写入4个字节，clientB向ofset+2写入4个字节</code>)</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><strong>示例</strong>：
-
-<ul>
-<li><img src="/images/blog_images/gfs00.jpg" alt="" />
-
-<ul>
-<li>1.client 询问Master对于指定chunk哪个chunkserver持有了当前的lease，同时询问其他replicas的位置；如果没有lease，那么master会选择一个replica，然后下发一个Lease</li>
-<li>2.Master告知client当前primary的标识以及其他replicas的位置(secondary)，client会把这些数据cache起来，直到primary不可达或者其不再持有lease</li>
-<li>3.client会把所有数据push到所有的replicas，chunkservers 会把这些数据存放在内部的LRU cache中，直到过期或者被使用</li>
-<li>4.当所有replicas都确认收到了client push的数据，client会向Primary发送write请求，Primary会先行执行操作，同时会为改动操作分配一个序列号</li>
-<li>5.Primary想所有的secondary replicas转发此次写请求，secondary按照primary分配的序列号依次执行</li>
-<li>6.当操作完成，Secondary会向Primary进行确认回复</li>
-<li>7.Primary向Client进行回复，如果执行过程中有任何错误，都会反馈给client。如果写入失败，client会选择重试3-7。</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-
-
-<h5>数据流</h5>
-
-<blockquote><p>系统把数据流从控制流中解耦出来，在Figure2中可以明显看出</p></blockquote>
-
-<ul>
-<li><strong>目标</strong>：
-
-<ul>
-<li>最大化单机带宽的使用
-
-<ul>
-<li>采用线性的方式来push数据，确保单机的出口带宽可以被充分利用，而不是向树状push时需要将出口带宽分给多个replicas (<code>并没有理解这样有什么高效，树状不也是充分利用了么？后续树状散射push出去貌似可以更高效？</code>)</li>
-</ul>
-</li>
-<li>避免网络瓶颈，和高延迟链接
-
-<ul>
-<li>每个机器都向离其最近的机器push数据</li>
-<li>distance 可以通过IP地址精确衡量（<code>内网IP吧，肯定是事先按照这种规则分配的IP</code>）</li>
-</ul>
-</li>
-<li>最小化延迟
-
-<ul>
-<li>利用TCP链接管道化数据传输，收到数据，立马向下转发，这依赖与全双工的链接（<code>结合这点，似乎能解释的通他比树状push数据高效了</code>）</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-
-
-<h5>Atomic Record Appends</h5>
-
-<blockquote><p>传统的写入方式，如果client都指定在某个位置写入数据，那么并发写入同一region就不是序列化的，例如region结尾会包含来自多个client的数据段</p></blockquote>
-
-<ul>
-<li><strong>描述</strong>：GFS可以保证其追加操作至少有一次是原子性的(<code>at least once atomically</code>)，类似于没有竞争情况下的Unix O_APPEND
-
-<ul>
-<li>GFS里大量使用了append操作(特意如此设计，避免随机写)，如果按照传统的做法，client端需要额外的负载逻辑以及昂贵的同步机制（例如分布式锁）</li>
-<li>GFS系统中对这种并发写的的操作通常使用多生产者-单消费者模型或者多client归并结果进行处理</li>
-<li>record append操作和write一样，遵循Lease那套规则</li>
-</ul>
-</li>
-<li><strong>细节</strong>：
-
-<ul>
-<li>在执行append操作时，Primary会检查当前chunk(chunk固定最大64M)是否可以容纳这条记录
-
-<ul>
-<li>如果不能，先填充满，填充操作不能超过chunk大小的1/4，避免过多碎片（<code>猜测：如果超了就让client去拆成多条</code>）</li>
-<li>告知secondaries执行相同操作，同时告知client去下一个chunk重试该操作</li>
-<li>如果能容纳，按照Figure2中的处理逻辑处理即可</li>
-</ul>
-</li>
-<li>如果append失败：
-
-<ul>
-<li>replicas 相同的chunk上的数据就会不一致(有的成功，有的失败了)，replicas相互之间按字节不一致</li>
-<li>接下来的append操作需要在更高的offset上或者下一个chunk上去append即可</li>
-</ul>
-</li>
+<li>不受NTP影响，或者，受NTP同步的影响，时钟只会降低或者升高频率，以尽快完成时钟同步</li>
+<li>如linux上的int clock_gettime(clockid_t clk_id, struct timespec *tp),clk_id为CLOCK_MONOTONIC_RAW(本质是jiffies)或者是CLOCK_MONOTONIC；分别对应上述不受NTP影响和受NTP影响两种</li>
 </ul>
 </li>
 </ul>
 
 
-<h5>Snapshot</h5>
-
-<blockquote><p>快照操作在保证最小化干扰当前的修改操作的情况下，利用copy-on-write瞬间完成对文件或文件夹的拷贝</p></blockquote>
+<p>适用性：</p>
 
 <ul>
-<li><strong>细节</strong>:
+<li>wall clock
 
 <ul>
-<li>Master收到快照请求，会先撤销所涉及的chunk的所有未交付的Leases</li>
-<li>Master 将此操作写入磁盘日志</li>
-<li>创建一个新的快照文件，其metadata 拷贝自源文件的metadata, 源文件对应的chunk引用计数都加一</li>
-<li>如果引用计数大于1的chunk要client被修改，那么Master会推迟响应client，然后告知chunkserver拷贝当前chunk（<code>系统所处的磁盘速度3倍于其百兆网卡</code>）</li>
-<li>Master针对client的请求，对新拷贝的chunk执行Leases</li>
+<li>适用于：
+
+<ul>
+<li>单机保证时序</li>
 </ul>
 </li>
-</ul>
-
-
-<h4>容错以及诊断</h4>
-
-<h5>高可用</h5>
-
-<blockquote><p>保证高可用的策略: faset recovery and replication</p></blockquote>
+<li>不适用：
 
 <ul>
-<li><strong>Chunk</strong>
-
-<ul>
-<li>主要规则：
-
-<ul>
-<li>每个chunk都会在不同的chunkservers，不同的机架(racks)上进行备份</li>
-<li>用户可以指定不同namespace下的文件执行不同的备份级别</li>
-<li>备份损坏或者服务器下线后，master会再增加备份，以满足相应的备份级别</li>
-</ul>
-</li>
-<li>未来规划：
-
-<ul>
-<li>使用奇偶校验（partiy）</li>
-<li>使用纠删码（ensure codes）</li>
+<li>单机计算duration或elapsed time，例如统计timeout，expire</li>
+<li>分布式环境下的时序问题</li>
 </ul>
 </li>
 </ul>
 </li>
-<li><strong>Master</strong>
+<li>monotonic clock
 
 <ul>
-<li>Master通过备份来保证可靠性（<code>not availability，master始终是单点</code>）</li>
-<li>replication：
+<li>适用于：
 
 <ul>
-<li>仅将operation log 和 checkpoints备份至多台机器</li>
-<li>只有operation log 被刷入磁盘，并同步至备份服务器后，mutation才被认为完成</li>
-<li>如果监测点发现Master不可用（机器宕机，磁盘挂了之类的），会将备份机启动为新的master，client通过dns规则可以快速对接到新的master上</li>
+<li>单机计算duration或elapsed time，例如统计timeout，expire</li>
+<li>单机保证时序</li>
 </ul>
 </li>
-<li>shadow：（<code>区别于备份机</code>）
+<li>不适用：
 
 <ul>
-<li>仅对外提供只读服务</li>
-<li>通过读取master备份机上的operation log来保持状态一致，同步master的决策（<code>仅能保证最终一致性</code>）</li>
-<li>chunk locations 也是在启东时通过询问chunkservers获取location信息，后续也会通过握手信息来监控其状态（相对Master而言频率较低）</li>
-<li>shadow 上的元数据信息会落后与master
-
-<h5>数据完整性</h5></li>
-</ul>
-</li>
-</ul>
-</li>
-<li>由chunkservers端维护自己的数据校验
-
-<ul>
-<li>why?
-
-<ul>
-<li>通过和其他备份进行交叉校验开销太大</li>
-<li>备份直接数据并不完全一样，例如GFS允许append失败发生时，有脏数据存在，不保证字节一致</li>
-</ul>
-</li>
-<li>how?
-
-<ul>
-<li>chunk被分为64KB大小的blocks，每个block有32bit的校验码</li>
-<li>校验码存放在内存中，并且持久化在日志里，和用户数据分离</li>
-<li>对于来自client或者其他chunkservers的读取操作：
-
-<ul>
-<li>在返回数据前进行完整性校验，以保证损坏的数据不会传播</li>
-<li>如果校验结果失败
-
-<ul>
-<li>返回错误码，并向master上报，master会令请求方去其他备份读取数据</li>
-<li>同时master会从其他备份拷贝当前chunk(<code>没有说是master让当前chunkservers去恢复，那文中提到read from another chunkserver是什么场景？</code>)</li>
-<li>当新的合法数据就位（<code>master并不一定把数据恢复到当前机器上，也有可能是在另外某台机器上新建了一份备份</code>），master会下令当前chunkservers删除其备份</li>
-</ul>
-</li>
-<li>数据校验并不会对读取性能有很大影响，因为：
-
-<ul>
-<li>大部分读取只会跨越很少的blocks，需要校验的数据非常少</li>
-<li>读取一方，尽量去对齐（align）读取数据的checksum block的边界来降低chunkservers数据校验成本（<code>对齐就优化了？意思是说每次尽量读整个block？关键每次写入也不一定写入一个完整的block？怎么生出校验码？</code>）</li>
-<li>校验码的查找和数据校验的工作并不会产生磁盘IO，所以这个动作可以和磁盘IO重叠进行</li>
-</ul>
-</li>
-</ul>
-</li>
-<li>校验码的计算在写入操作（append）进行的深度优化
-
-<ul>
-<li>仅仅增量的去更新最后一部分的checksum block的校验码， 计算通过append新添加的新的 checksum blocks的校验码（<code>这里的checksum block 是个什么概念？</code>）</li>
-<li>即使最后一段的checksum block 已经损坏，而且我们没有检测到；新的checksum值也不会匹配存储的数据，在block下一次被读取时就会被检测到</li>
-</ul>
-</li>
-<li>对于已经存在的chunk进行overwrite：
-
-<ul>
-<li>我们必须读取并且验证被覆盖区域的第一个和最后一个block，然后执行写入操作</li>
-<li>否则，新的checksum就会隐藏其他没有被overwriten的区域的损坏数据</li>
-</ul>
-</li>
-<li>chunkservers在空闲时间会扫描验证不活跃的chunks，以此来对鲜有读取的损坏数据进行发现，master会重建备份（<code>通过这一点保证GFS的备份级别是准确的，而不是自以为是的</code>）</li>
+<li>分布式环境下时序问题</li>
 </ul>
 </li>
 </ul>
@@ -1070,40 +583,44 @@ pthread_mutex_unlock(&amp;mutex); //  : pthread_cond_signal(&amp;cv);</p>
 </ul>
 
 
-<h5>诊断工具</h5>
+<p>那么分布式环境下的时序问题如何解决呢?</p>
 
 <ul>
-<li>通过广泛且详细的诊断日志，以微小的开销来来协助完不可测量（immeasurably）问题的隔离，调试，性能分析
+<li>全序(total order)或者高精度的时间点共识(强调某个时间点)：
 
 <ul>
-<li>记录特定的事件（例如chunkservers 上线或者宕机）（<code>所以，究竟由谁来记录诊断日志？猜测是所有的角色都参与</code>）</li>
-<li>记录所有的RPC请求以及回复</li>
+<li>使用原子钟加更严格复杂的时钟同步策略来保证误差</li>
+<li>fault-tolent total ordering broadcast</li>
+</ul>
+</li>
+<li>偏序（partial order）：
+
+<ul>
+<li>利用因果关系来解决时序问题，即logic clock</li>
 </ul>
 </li>
 </ul>
 
 
-<h3>经验总结</h3>
+<h2>Logic Clock</h2>
 
-<h5>业务</h5>
+<p>利用因果关系来实现Logic Clock，见Lamport的<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System">论文</a></p>
 
-<ul>
-<li>最初设想GFS只应用与产品环境，结果后来承担了科研和开发任务。因此例如权限，配额等功能被引入了进来</li>
-</ul>
+<p>利用Logic Clock来保证时序(偏序)，见 <a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/vector-clock">Vector Clock</a></p>
 
+<h2>其他</h2>
 
-<h5>实现</h5>
+<p>一个错误使用wall clock的<a href="http://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">案例</a></p>
 
-<ul>
-<li>GFS是依赖与linux 磁盘驱动，因为IDE接口协议版本不匹配有可能会造成数据损坏，也正是因为这一点促使了checksums机制的使用，同时开发团队也修改了kernel来处理这种协议不匹配</li>
-<li>linux 2.2 kenel中的fsync() 的开销是跟文件大小成比例的，而不是和被修改的局部大小。这影响了size较大的operation log的写性能，尤其是checkpoint实现之前。后来的解决方案是使用同步写来完成这个操作，最终迁移到了linux 2.4</li>
-<li>涉及读写锁，mmap，当磁盘线程正在page之前的映射的数据时，锁会阻塞网络线程把数据映射进内存；最终把mmap()缓冲了pread()(<code>不是很懂</code>)</li>
-</ul>
+<h2>References</h2>
 
+<ol>
+<li><a href="http://dataintensive.net/">《Designing Data-Intensive Applications》8.Unreliable Clocks</a></li>
+<li><a href="http://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">How to do distributed locking</a></li>
+<li><a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System">《Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System》</a></li>
+<li><a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/vector-clock">Vector Clock</a></li>
+</ol>
 
-<h3>参考</h3>
-
-<p><a href="http://static.googleusercontent.com/media/research.google.com/en//archive/gfs-sosp2003.pdf">Google File System</a></p>
 ]]></content>
   </entry>
   

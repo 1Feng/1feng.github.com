@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: distribute | 1Feng's Blog]]></title>
+  <link href="http://1feng.github.io/tags/distribute/atom.xml" rel="self"/>
+  <link href="http://1feng.github.io/"/>
+  <updated>2019-03-04T20:22:19+08:00</updated>
+  <id>http://1feng.github.io/</id>
+  <author>
+    <name><![CDATA[Travis Swicegood]]></name>
+    <email><![CDATA[codingforfan@gmail.com]]></email>
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Read-Only 的 linearizability]]></title>
+    <link href="http://1feng.github.io/2017/06/16/smarter/"/>
+    <updated>2017-06-16T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/16/smarter</id>
+    <content type="html"><![CDATA[<blockquote><p><a href="https://github.com/1Feng/learn-distributed-systems/blob/master/practice/storage/others/SMARTER/Bolosky.pdf">《Paxos Replicated State Machines as the Basis of a High-Performance
+Data Store》</a> 介绍了使用了paxos算法进行副本同步，这里仅总结如何保证read-only操作的linearizability</p></blockquote>
+
+<h2>How</h2>
+
+<ol>
+<li>收到read-only请求后，记录下一个slot number</li>
+<li>slot number = max(已经commit的最大的operation number VS 当前节点成为leader后re-proposed最大的operation number)</li>
+<li>向所有replicas发送消息，检查是否有新leader出现（即检查当前节点是否扔是合法leader）</li>
+<li>如果加上自身有总数过半的节点仍然认为当前节点是leader则继续，否则丢弃请求</li>
+<li>将请求连同1中记录的slot number转发到任意replica（最好是3中回复确认的的replica），称之为replica A</li>
+<li>replica A等待slot number被执行，之后检测是否有新的paxos configuration被选择，如果有则丢弃请求，否则执行read操作返回结果</li>
+</ol>
+
+
+<h2>Why</h2>
+
+<p>最简单的保证linearizability的read-only的方法是将read-only操作当做写操作一样走一遍paxos流程，但是这样读的性能太低了，并且会导致leader压力巨大</p>
+
+<p>论文中提出的方法省去了走paxos流程的磁盘IO，仅一次广播检测确认leader角色，并将真正的读操作转移到了replica上</p>
+
+<p>那么如何证明呢？</p>
+
+<ol>
+<li>read-only linearizability需要保证的是在这个请求到达之前已经成功提交的写入都应该被本次读取看到</li>
+<li>我们将read-only request 到来之前已经成功提交的最后一条写入的operation number为 N，则有以下三种情况：</li>
+<li>N 是前一个leader提交的</li>
+<li>N 是当前节点成为leader后提交的</li>
+<li>当前节点早已经不是leader， N其实是后续leader提交的</li>
+<li>我们只需保证slot number >= N即可保证linearizability</li>
+<li>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</li>
+<li>N是当前leader提交的，那么一定有slot number >= N</li>
+<li>该情况请求会被丢弃，slot number不需要保证大于等于N</li>
+</ol>
+
+
+<h2>Extension</h2>
+
+<p>TIDB中在使用raft做数据同步的情况下，也使用了一个类似的<a href="https://zhuanlan.zhihu.com/p/25367435">方法</a>来保证read-only的linearizability：</p>
+
+<blockquote><p>当 leader 要处理一个读请求的时候：
+1. 将当前自己的 commit index 记录到一个 local 变量 ReadIndex 里面。
+2. 向其他节点发起一次 heartbeat，如果大多数节点返回了对应的 heartbeat response，那么 leader 就能够确定现在自己仍然是 leader。
+3. Leader 等待自己的状态机执行，直到 apply index 超过了 ReadIndex，这样就能够安全的提供 linearizable read 了。
+4. Leader 执行 read 请求，将结果返回给 client。</p></blockquote>
+
+<p>其中：</p>
+
+<blockquote><p>实现 ReadIndex 的时候有一个 corner case，在 etcd 和 TiKV 最初实现的时候，我们都没有注意到。也就是 leader 刚通过选举成为 leader 的时候，这时候的 commit index 并不能够保证是当前整个系统最新的 commit index，所以 Raft 要求当 leader 选举成功之后，首先提交一个 no-op 的 entry，保证 leader 的 commit index 成为最新的。</p></blockquote>
+
+<p>与本文中<code>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</code>是类似的（raft毕竟是paxos的变种）</p>
+
+<p>另外一种方式就是TIDB根据raft论文实现的lease的方式：</p>
+
+<blockquote><p>在 Raft 论文里面，提到了一种通过 clock + heartbeat 的 lease read 优化方法。也就是 leader 发送 heartbeat 的时候，会首先记录一个时间点 start，当系统大部分节点都回复了 heartbeat response，那么我们就可以认为 leader 的 lease 有效期可以到 start + election timeout / clock drift bound 这个时间点。</p>
+
+<p>为什么能够这么认为呢？主要是在于 Raft 的选举机制，因为 follower 会在至少 election timeout 的时间之后，才会重新发生选举，所以下一个 leader 选出来的时间一定可以保证大于 start + election timeout / clock drift bound。</p></blockquote>
+
+<h2>Referrence</h2>
+
+<ol>
+<li><a href="https://zhuanlan.zhihu.com/p/25367435">TiKV 源码解析系列 - Lease Read</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[线性一致性]]></title>
+    <link href="http://1feng.github.io/2017/06/15/linearizability/"/>
+    <updated>2017-06-15T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/15/linearizability</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>所谓的linearizability其目的在于描述系统的数据，对外看起来就像只有一份，所有针对这部分数据的操作都是原子(Concurrency-atomic)的；在分布式系统领域来讲和CAP-consistent是等价的；在多核并发编程时由于存在CPU-Cache一致性问题，linearizability的概念同样适用。</p></blockquote>
+
+<h2>What</h2>
+
+<p><strong>通用的定义（分布式系统 and 多核系统）</strong>：</p>
+
+<blockquote><p>every read returns the latest value written into the shared variable preceding that read operation, then the shared object is linearizable</p></blockquote>
+
+<p><strong>时序角度</strong>：</p>
+
+<blockquote><p>对于linearizability 系统，任意的两个操作的顺序都是可以比较的，即存在total order. 考虑：如果数据只有一份拷贝，同时操作又都是atomic的，那么任意两个操作总有先后关系，所以total order必然存在。</p></blockquote>
+
+<p><strong>对比CAP-consistent</strong>：</p>
+
+<blockquote><p>任意的一条读操作R，如果发生在某条写操作W完成之后（或执行过程中），那么R读到的要么是W的内容，要么是W之后的写操作写入的内容</p></blockquote>
+
+<p>这里的定义与CAP-consistent略有出入，为什么放宽限制为<code>或执行过程中</code>呢？因为定义之中所有的之前之后是否完成都是所谓<code>上帝视角</code>来判定的；对于client而言只有<code>clients之间额外的交流沟通</code>（参考后文），而对于<code>clients之间额外的交流沟通</code>而言，W完成与否也是无法判定的，考虑即使是执行W的client，也只能拿到W完成的响应时间，并不能真正知道server端W完成的时间（中间有网络延迟，物理时钟有误差等），即使利用因果关系进行<code>clients之间额外的交流沟通</code>也无从考证真正完成的时序。因此W是否真的完成并意义不大。</p>
+
+<p>结合图示来看：
+<img src="/images/blog_images/linearizability/linearizability.png" alt="" />
+一旦有client读取到了写入的值，即使这个写入操作还没有完成，那么后续的读取操作都应该能读到该值或者之后写入的值</p>
+
+<h2>Why</h2>
+
+<ul>
+<li>对于clients而言，一旦存在<code>额外的交流沟通的渠道</code>，linearizability问题就会凸显，例如：
+
+<ul>
+<li>A,B两个人去刷飞机票，A刷到了，B没有刷到（显示全部售光），如果A,B之间没有交流，即使B刷票先于A，则交易看起来也没有什么问题</li>
+<li>但如果A,B两个人存在交流，例如B没有刷到票，然后跑去隔壁房间问A，恰巧碰到A正在刷，并且刷票成功（B刷票 happened before A刷票），则交易存在问题</li>
+</ul>
+</li>
+<li>如果能够提供linearizability的分布式系统，则：
+
+<ul>
+<li>可以利用该系统实现分布式锁操作</li>
+<li>利用锁操作又可以用进行leader-election</li>
+<li>利用锁操作可以达成uniqueness guarantees</li>
+<li>linearizability sequence number --- 可以用来解决total order问题</li>
+</ul>
+</li>
+</ul>
+
+
+<h2>How</h2>
+
+<p>如果可以保证分布式系统的各操作时序可比较（total order），则linearizability可达成；所以linearizability的实现问题可以转换成实现fault-tolent total order</p>
+
+<p>而实现fault-tolent total oerder是一个distributed consensus问题</p>
+
+<blockquote><p>似乎就是一个循环: 如果实现了linearizability，则实现了linearizability sequence number，从而解决了total order问题，即实现了distributed consensus；而实现linearizability 又依赖通过distributed consensus实现total order</p></blockquote>
+
+<h2>Weakness</h2>
+
+<p>linearizability is slow all the time, not only during a network fault（节点间通信达成共识本身就很耗时）</p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》9.Linearizability</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[弱一致性]]></title>
+    <link href="http://1feng.github.io/2017/06/14/weak-consistency/"/>
+    <updated>2017-06-14T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/14/weak-consistency</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>对于CAP而言，partition-tolerant是客观的必须要做的，不然不能称之为分布式系统；而consistent和available则是主观的，
+应当根据业务需求适当调整的。相对于linearizability的强一致，其实还有多种弱一致性模型可以供系统设计时参考, 这里着重描述两种重要的一致性模型</p></blockquote>
+
+<h2>Data-centric consistent models</h2>
+
+<h3>Causal Consistency</h3>
+
+<blockquote><p>与linearizability相同，causal consistency同样属于data-centric consistent models。与前者明显的区别在于，linearizability的系统的所有操作都存在total order，而causal consistency只需要partial order即可。</p></blockquote>
+
+<h4>定义：</h4>
+
+<blockquote><p>对于所有的进程看到的所有的写操作，都是因果相关的（causally related）且顺序相同。所有的读操作看到的结果也需要和写的因果顺序一致</p></blockquote>
+
+<p>如图：
+<img src="/images/blog_images/weak_consistency/causal-consistency.png" alt="" /></p>
+
+<p>两次写操作没有因果关系（concurrence），所以后续的两个client的读结果不相同，但这符合causal consistency的定义</p>
+
+<h4>How</h4>
+
+<p>实现causally related partital order即可，例如vector clock + causal order multicast protocol</p>
+
+<h2>Client-centric consistent models</h2>
+
+<h3>Eventual Consistency</h3>
+
+<blockquote><p>最终一致性比较好容易理解，很多primary-backup(asynchronous)架构的RDBMS都是使用的最终一致性模型</p></blockquote>
+
+<h4>定义：</h4>
+
+<blockquote><p>如果没有新的更新/写入，最终所有的clients都会看到最新的数据</p></blockquote>
+
+<p>最终是多久，不好说...</p>
+
+<h4>典型例子：</h4>
+
+<p>DNS系统</p>
+
+<h4>How</h4>
+
+<p> asynchronous log shipping + gossip protocal</p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="https://www.amazon.com/Distributed-Systems-Algorithmic-Approach-Information/dp/1466552972">《Distributed Systems An Algorithmic Approach Second Edition》16.3 16.4</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[zab 算法总结]]></title>
+    <link href="http://1feng.github.io/2017/06/13/zab/"/>
+    <updated>2017-06-13T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/13/zab</id>
+    <content type="html"><![CDATA[<h1>Summary</h1>
+
+<blockquote><p>zab是Yahoo提出的leader-base的一致性协议，由于raft晚于该协议猜测raft中有借鉴该协议的一些思想
+此文仅总结理解的一些重点，并不完整总结该算法</p></blockquote>
+
+<h2>FLP？</h2>
+
+<p>zab 中使用了timeout来进行故障检测，并没有突破FLP</p>
+
+<h2>Zxid</h2>
+
+<ul>
+<li>高32位：代表epoch，与raft-term或multi-paxos的proposal number语意相同，与raft-term的不同点是自增的时机是在成为leader后</li>
+<li>低32位：自增id，等同与multi-paxos的instance-id/instance-index 或 raft-log-index</li>
+</ul>
+
+
+<h2>BroadCast</h2>
+
+<blockquote><p>Zab broadcast依赖与FIFO（TCP）+ zxid 来保证消息的顺序（causal order + total order）；paxos并不依赖于此而是靠proposal number来保证这一点；而raft则是通过log-index来保证的</p></blockquote>
+
+<p>Zab的broadcast本质就是放弃了abort动作的2PC协议,即：</p>
+
+<ul>
+<li>2PC中P1阶段可以由Participant选择YES or Abort，而Zab-BroadCast的P1阶段follower只能回复YES（即ACK），或者选择放弃该leader</li>
+</ul>
+
+
+<h2>Recovery</h2>
+
+<p>recovery 需要在正确性上保证以下两点：</p>
+
+<ol>
+<li>不要忘记已经交付的消息</li>
+<li>忽视应该跳过的消息（即leader 已经 broadcast，但是未获得多数派确认，后续leader又有新的提交，则该消息应该被忽视/放弃）</li>
+</ol>
+
+
+<p>方法：</p>
+
+<ul>
+<li>选举leader时需保证leader拥有多数派认同的最大的zxid；与raft的log-up-to-date语意一致</li>
+<li>通过epoch来避免宕机恢复的leader提交应忽略的消息；与raft的term作用一致</li>
+</ul>
+
+
+<h2>Reference</h2>
+
+<p>[1]. <a href="https://github.com/1Feng/learn-distributed-systems/blob/master/theory/consensus/zab/A_simple_totally_ordered_broadcast_protocol.pdf">A simple totally ordered broadcast protocol</a></p>
+
+<p>[2]. <a href="http://zookeeper.apache.org/doc/r3.5.0-alpha/zookeeperInternals.html#sc_atomicBroadcast">ZooKeeper Internals</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Paxos made simple]]></title>
+    <link href="http://1feng.github.io/2017/06/12/paxos-made-simple/"/>
+    <updated>2017-06-12T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/12/paxos-made-simple</id>
+    <content type="html"><![CDATA[<h1>Summary</h1>
+
+<blockquote><p>paxos算法的的核心思想是“与其预测未来，不如限制当下”，即通过保证当前的操作，来一步一步达到预期</p></blockquote>
+
+<h1>Theory</h1>
+
+<h2>要求</h2>
+
+<p><strong>Safety</strong>:</p>
+
+<ul>
+<li>只有一个被提议的value被选定(validity)</li>
+<li>两个不同的进程不能做出不一样的的选择(agreement)</li>
+</ul>
+
+
+<p><strong>Liveness</strong></p>
+
+<ul>
+<li>最终会有被提议的value被选定</li>
+<li>如果一个value被选定，任意进程最终一定会得知这一结果</li>
+</ul>
+
+
+<h2>推导过程</h2>
+
+<p>首先设定三个角色 proposers，acceptors，learners。</p>
+
+<blockquote><p>要想有value被选定，则acceptor必须要接受proposer的提议，于是我们要求</p></blockquote>
+
+<ul>
+<li><strong>P1. 任意acceptor必须接受(accept)它收到的的第一个提议(proposal)</strong></li>
+</ul>
+
+
+<blockquote><p>那么问题来了，多个proposers会提议多个value，无法满足safety.
+于是我们考虑让acceptor可以接受（accept）多个提议，为了便于区分，我们考虑为提议增加一个total order的序号(proposal number)，即提议由proposal number + value组成
+但是最终我们是要选定(chosen)一个value的, 于是我们考虑可以接受多个提议，但是我们必须保证这些提议的value都是一样的，于是我们进一步要求：</p></blockquote>
+
+<ul>
+<li><strong>P2. 如果value为v的提议被选定(chosen)，则所有number更大的且被选定的提议的value也必须为v</strong></li>
+</ul>
+
+
+<blockquote><p>一个提议如果被选定(chosen)，那么至少被一个acceptor接受(accepted)过, 所以我们可以通过满足如下条件来达成P2</p></blockquote>
+
+<ul>
+<li><strong>P2a. 如果value为v的提议被选定(chosen)，那么所有number更大的且被任意acceptor接受过（accepted）的提议其value也必须是v</strong></li>
+</ul>
+
+
+<blockquote><p>考虑一个acceptor c从没有收到提议，此时一个从故障中恢复的proposer发起了一个更高number的提议，且该提议与已经chosen的value不一样。按照P1，c肯定会accept该提议,
+这样便违反了2a。于是我们强化一下P2a的要求</p></blockquote>
+
+<ul>
+<li><strong>P2b. 如果value为v的提议被选定(chosen)，那么由proposer发起的number更大的提议的value也必须是v</strong></li>
+</ul>
+
+
+<blockquote><p>P2b通过限定proposer的动作来满足P2，通过归纳法我们可以得知，只要保证如下规则，就可以满足P2b</p></blockquote>
+
+<ul>
+<li><strong>P2c. 那么对于大多数(majority)acceptors,我们称之为集合S；如果一个提议(n，v)被发起，则要么1成立，要么2成立</strong>
+
+<ul>
+<li><strong>S中不存在acceptor接受过(accepted) number 小于n的提议</strong></li>
+<li><strong>v是S接受过的(accepted)所有提议里number小于n的提议中number最大的提议的value</strong></li>
+</ul>
+</li>
+</ul>
+
+
+<blockquote><p>只要满足P2c就可以满足P2b，进而满足P2；至此我们便有了更具体的方式来实现P2c,具体如下：</p></blockquote>
+
+<ol>
+<li>proposer选择一个proposal number n，然后向每个acceptors发起请求，要求acceptors：
+
+<ul>
+<li>保证不再接受(accept)number小于n的提议，并且</li>
+<li>如果已经接受过(accepted)number小于n的提议，则这些提议中number小于n的最大的number以及该提议的value返回给proposer</li>
+</ul>
+</li>
+<li>如果proposer收到大多数(majority)的acceptors的响应，则proposer可以发起一个序号为number的提议，其value是v
+
+<ul>
+<li>v是所有acceptor响应的(mi, vi)中最大的m对应的v</li>
+<li>如果没有acceptor响应(mi, vi)，则v由proposer自己决定</li>
+</ul>
+</li>
+</ol>
+
+
+<blockquote><p>以上我们称之为PREPARE请求。利用PREPARE请求，我们完成了一个学习的过程，从而实现了P2c; proposal的具体实现我们归纳出来了，对应的acceptor的的要求也很容易得出：</p></blockquote>
+
+<ul>
+<li><strong>当且仅当(iff)acceptor 没有响应number大于n的prepare请求时，才可以接受(accept)number为n的提议</strong></li>
+</ul>
+
+
+<blockquote><p>由于acceptor收到prepare请求后会保证不再接受(accept) proposal number小于n的提议，则acceptor便没有必要再回复proposal number小于n的prepare请求，我们可以直接忽略，或回复error或null使proposer放弃后续提议.
+于是我们可以将proposer和acceptor的动作综合起来描述如下：</p></blockquote>
+
+<ul>
+<li><strong>Phase 1</strong>
+
+<ul>
+<li>proposer生成一个proposer number n，然后发送prepare请求到所有（其实也可以是majority，但越多越能保证收到过半数的回复）acceptors</li>
+<li>acceptor收到prepare请求后：
+
+<ul>
+<li>如果之前有收到proposal number > n的prepare请求，则直接忽略该prepare请求，否则</li>
+<li>回复该prepare请求，同时如果之前有接受（accept）提议，则回复内容中带上接受的提议value和对应该value的最大的proposal number</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Phase 2</strong>
+
+<ul>
+<li>proposer收到总数过半（majority）的回复后：
+
+<ul>
+<li>如果所有回复中都没有携带提议value，则proposal自己选择一个提议value</li>
+<li>否则从所有回复中选择proposal number最大的的value</li>
+<li>向所有(其实也可以是majority，但越多越能保证收到过半数的accept）acceptor发送上述得到的提议value和proposer number n</li>
+</ul>
+</li>
+<li>acceptor收到提议请求后：
+
+<ul>
+<li>如果之前没有回复proposal number > n的prepare请求，则接受（accept）该请求</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<blockquote><p>以上可以完成总数过半的acceptor 接受（accept）一个value，但并不代表被chosen，该value被chosen需要：</p></blockquote>
+
+<ul>
+<li><strong>由learner来找出哪个提议（proposal number ＋ value）被总数过半的的acceptors接受了（accepted），方式有如下：</strong>
+
+<ul>
+<li><strong>由接受（accept）提议的acceptor向所有learner发送通知消息，开销 M＊N次通信（假设M个接受该提议的acceptor，N个learner）</strong></li>
+<li><strong>由接受（accept）提议的acceptor向某个learner发送通知消息，由该learner确定chosen结果后再广而告之，开销M＋N次通信</strong></li>
+<li><strong>扩大方法二中某个learner为多个learner，适当增加开销，但可以保证可靠性（learner单点问题）</strong></li>
+</ul>
+</li>
+</ul>
+
+
+<p>TO BE CONTINUE!</p>
+]]></content>
+  </entry>
+  
+</feed>

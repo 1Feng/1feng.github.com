@@ -1,0 +1,228 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>弱一致性 - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="Introduce 对于CAP而言，partition-tolerant是客观的必须要做的，不然不能称之为分布式系统；而consistent和available则是主观的，
+应当根据业务需求适当调整的。相对于linearizability的强一致，其实还有多种弱一致性模型可以供系统设计时参考, &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">弱一致性</h2>
+	<div class="entry-content"><h1>Introduce</h1>
+
+<blockquote><p>对于CAP而言，partition-tolerant是客观的必须要做的，不然不能称之为分布式系统；而consistent和available则是主观的，
+应当根据业务需求适当调整的。相对于linearizability的强一致，其实还有多种弱一致性模型可以供系统设计时参考, 这里着重描述两种重要的一致性模型</p></blockquote>
+
+<h2>Data-centric consistent models</h2>
+
+<h3>Causal Consistency</h3>
+
+<blockquote><p>与linearizability相同，causal consistency同样属于data-centric consistent models。与前者明显的区别在于，linearizability的系统的所有操作都存在total order，而causal consistency只需要partial order即可。</p></blockquote>
+
+<h4>定义：</h4>
+
+<blockquote><p>对于所有的进程看到的所有的写操作，都是因果相关的（causally related）且顺序相同。所有的读操作看到的结果也需要和写的因果顺序一致</p></blockquote>
+
+<p>如图：
+<img src="/images/blog_images/weak_consistency/causal-consistency.png" alt="" /></p>
+
+<p>两次写操作没有因果关系（concurrence），所以后续的两个client的读结果不相同，但这符合causal consistency的定义</p>
+
+<h4>How</h4>
+
+<p>实现causally related partital order即可，例如vector clock + causal order multicast protocol</p>
+
+<h2>Client-centric consistent models</h2>
+
+<h3>Eventual Consistency</h3>
+
+<blockquote><p>最终一致性比较好容易理解，很多primary-backup(asynchronous)架构的RDBMS都是使用的最终一致性模型</p></blockquote>
+
+<h4>定义：</h4>
+
+<blockquote><p>如果没有新的更新/写入，最终所有的clients都会看到最新的数据</p></blockquote>
+
+<p>最终是多久，不好说&#8230;</p>
+
+<h4>典型例子：</h4>
+
+<p>DNS系统</p>
+
+<h4>How</h4>
+
+<p> asynchronous log shipping + gossip protocal</p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="https://www.amazon.com/Distributed-Systems-Algorithmic-Approach-Information/dp/1466552972">《Distributed Systems An Algorithmic Approach Second Edition》16.3 16.4</a></li>
+</ol>
+
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-14T23:59:00+08:00" pubdate data-updated="true">Jun 14<span>th</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

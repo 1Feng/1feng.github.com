@@ -1,0 +1,627 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: system | 1Feng's Blog]]></title>
+  <link href="http://1feng.github.io/tags/system/atom.xml" rel="self"/>
+  <link href="http://1feng.github.io/"/>
+  <updated>2019-03-04T20:22:19+08:00</updated>
+  <id>http://1feng.github.io/</id>
+  <author>
+    <name><![CDATA[Travis Swicegood]]></name>
+    <email><![CDATA[codingforfan@gmail.com]]></email>
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Read-Only 的 linearizability]]></title>
+    <link href="http://1feng.github.io/2017/06/16/smarter/"/>
+    <updated>2017-06-16T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/16/smarter</id>
+    <content type="html"><![CDATA[<blockquote><p><a href="https://github.com/1Feng/learn-distributed-systems/blob/master/practice/storage/others/SMARTER/Bolosky.pdf">《Paxos Replicated State Machines as the Basis of a High-Performance
+Data Store》</a> 介绍了使用了paxos算法进行副本同步，这里仅总结如何保证read-only操作的linearizability</p></blockquote>
+
+<h2>How</h2>
+
+<ol>
+<li>收到read-only请求后，记录下一个slot number</li>
+<li>slot number = max(已经commit的最大的operation number VS 当前节点成为leader后re-proposed最大的operation number)</li>
+<li>向所有replicas发送消息，检查是否有新leader出现（即检查当前节点是否扔是合法leader）</li>
+<li>如果加上自身有总数过半的节点仍然认为当前节点是leader则继续，否则丢弃请求</li>
+<li>将请求连同1中记录的slot number转发到任意replica（最好是3中回复确认的的replica），称之为replica A</li>
+<li>replica A等待slot number被执行，之后检测是否有新的paxos configuration被选择，如果有则丢弃请求，否则执行read操作返回结果</li>
+</ol>
+
+
+<h2>Why</h2>
+
+<p>最简单的保证linearizability的read-only的方法是将read-only操作当做写操作一样走一遍paxos流程，但是这样读的性能太低了，并且会导致leader压力巨大</p>
+
+<p>论文中提出的方法省去了走paxos流程的磁盘IO，仅一次广播检测确认leader角色，并将真正的读操作转移到了replica上</p>
+
+<p>那么如何证明呢？</p>
+
+<ol>
+<li>read-only linearizability需要保证的是在这个请求到达之前已经成功提交的写入都应该被本次读取看到</li>
+<li>我们将read-only request 到来之前已经成功提交的最后一条写入的operation number为 N，则有以下三种情况：</li>
+<li>N 是前一个leader提交的</li>
+<li>N 是当前节点成为leader后提交的</li>
+<li>当前节点早已经不是leader， N其实是后续leader提交的</li>
+<li>我们只需保证slot number >= N即可保证linearizability</li>
+<li>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</li>
+<li>N是当前leader提交的，那么一定有slot number >= N</li>
+<li>该情况请求会被丢弃，slot number不需要保证大于等于N</li>
+</ol>
+
+
+<h2>Extension</h2>
+
+<p>TIDB中在使用raft做数据同步的情况下，也使用了一个类似的<a href="https://zhuanlan.zhihu.com/p/25367435">方法</a>来保证read-only的linearizability：</p>
+
+<blockquote><p>当 leader 要处理一个读请求的时候：
+1. 将当前自己的 commit index 记录到一个 local 变量 ReadIndex 里面。
+2. 向其他节点发起一次 heartbeat，如果大多数节点返回了对应的 heartbeat response，那么 leader 就能够确定现在自己仍然是 leader。
+3. Leader 等待自己的状态机执行，直到 apply index 超过了 ReadIndex，这样就能够安全的提供 linearizable read 了。
+4. Leader 执行 read 请求，将结果返回给 client。</p></blockquote>
+
+<p>其中：</p>
+
+<blockquote><p>实现 ReadIndex 的时候有一个 corner case，在 etcd 和 TiKV 最初实现的时候，我们都没有注意到。也就是 leader 刚通过选举成为 leader 的时候，这时候的 commit index 并不能够保证是当前整个系统最新的 commit index，所以 Raft 要求当 leader 选举成功之后，首先提交一个 no-op 的 entry，保证 leader 的 commit index 成为最新的。</p></blockquote>
+
+<p>与本文中<code>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</code>是类似的（raft毕竟是paxos的变种）</p>
+
+<p>另外一种方式就是TIDB根据raft论文实现的lease的方式：</p>
+
+<blockquote><p>在 Raft 论文里面，提到了一种通过 clock + heartbeat 的 lease read 优化方法。也就是 leader 发送 heartbeat 的时候，会首先记录一个时间点 start，当系统大部分节点都回复了 heartbeat response，那么我们就可以认为 leader 的 lease 有效期可以到 start + election timeout / clock drift bound 这个时间点。</p>
+
+<p>为什么能够这么认为呢？主要是在于 Raft 的选举机制，因为 follower 会在至少 election timeout 的时间之后，才会重新发生选举，所以下一个 leader 选出来的时间一定可以保证大于 start + election timeout / clock drift bound。</p></blockquote>
+
+<h2>Referrence</h2>
+
+<ol>
+<li><a href="https://zhuanlan.zhihu.com/p/25367435">TiKV 源码解析系列 - Lease Read</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[CAP 问题]]></title>
+    <link href="http://1feng.github.io/2017/06/08/cap/"/>
+    <updated>2017-06-08T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/08/cap</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>于2002年提出的CAP理论（三选二的方式来评估分布式系统）确实为分布式系统领域的发展提供了指导价值，但是就今天而言，这套理论已经意义微小了</p></blockquote>
+
+<h2>Consistent</h2>
+
+<p>这里的一致性指的是强一致，又称<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/consistency/linearizability">linearizable</a>或atomic。</p>
+
+<p>论文中的描述如下：</p>
+
+<blockquote><p>Under this consistency guarantee, there must exist a total order on all operations such that each operation looks as if it were completed at a single instant.</p></blockquote>
+
+<p>简单来讲就是如果把分布式系统看做一个黑盒，在外部看起来这个系统就是和单机没有区别。</p>
+
+<p>具体的来说：</p>
+
+<blockquote><p>任意的一条读操作R，如果发生在某条写操作W完成之后，那么R读到的要么是W的内容，要么是W之后的写操作写入的内容</p></blockquote>
+
+<p>更详细的描述可以参考<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/consistency/linearizability">linearizable</a></p>
+
+<p>这里的consistent 和 ACID中的consistent是完全不同的概念：
+- ACID-consistent特指事务
+- CAP-consistent仅仅是请求/响应操作顺序的属性</p>
+
+<h2>Available</h2>
+
+<p>论文中的定义：</p>
+
+<blockquote><p>For a distributed system to be continuously available, every request received
+by a non-failing node in the system must result in a response</p></blockquote>
+
+<p>这里的response是指no-error response</p>
+
+<p>即使是Probabilistic availability，在任意的failures发生时也不会影响针对CAP-available的结论，但是这里为了简单起见特指100% availability。</p>
+
+<p>如果专门针对partition-tolerance而言的话，available可以描述为：</p>
+
+<blockquote><p>even when severe
+network failures occur, every request must terminate.</p></blockquote>
+
+<p>terminate 是指任意使用该分布式系统的算法都会终止，注意是算法的终止。</p>
+
+<h2>Partition Tolerance</h2>
+
+<blockquote><p>网络割接和交换机故障都会造成network partition</p></blockquote>
+
+<p>network partition 图示:</p>
+
+<p><img src="/images/blog_images/cap/network-partition.png" alt="" /></p>
+
+<p>CAP的问题也是从这里开始体现：</p>
+
+<ul>
+<li>partition tolerance并非和CA对等的属性，而是一种因果的关系：partition发生时是选A还是选C，即如何去tolerant partition，</li>
+<li>分布式系统需要考虑的其他<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/unreliable-network">网络问题</a>也很多，包括延迟，网络不可靠等，并不仅仅是partition，所以使用CA,CP,AP去描述一个分布式系统并不完整</li>
+<li>很多分布式系统可以根据业务需求降低对consistent的要求，降低对available的要求，所以根本无法用CAP来描述</li>
+</ul>
+
+
+<h2>Partition in practice</h2>
+
+<blockquote><p>尽管network partition不能涵盖分布式系统所有需要面对的网络问题，但是它确实是网络问题中的一个难点和重点</p></blockquote>
+
+<h3>single-leader-Architecture</h3>
+
+<p><img src="/images/blog_images/cap/single-leader.png" alt="" /></p>
+
+<p>当某个client和leader处于不同partition时，此时CAP-available丢失，如果按照CAP理论，只能称之为CP</p>
+
+<h3>multi-leader-Architecture</h3>
+
+<p><strong>情景一</strong></p>
+
+<p><img src="/images/blog_images/cap/multi-leader-c.png" alt="" /></p>
+
+<p>某个client和所有的leader都不在一个partition，此时CAP-available丢失，如果按照CAP理论，只能称之为CP</p>
+
+<p>如果你允许（业务上允许）图示中的client2对replica进行read操作，则CAP-consistent也会丢失，只能称之为P（CAP的3选2现在成了3选1）</p>
+
+<p><strong>情景二</strong></p>
+
+<p><img src="/images/blog_images/cap/multi-leader.png" alt="" /></p>
+
+<p>leaders不在一个partition，此时CAP-consistent丢失，如果按照CAP理论，只能称之为AP</p>
+
+<h3>dynamo-style-Architecture(no-leader)</h3>
+
+<p><img src="/images/blog_images/cap/dynamo-style.png" alt="" /></p>
+
+<p>R + W > N,但是当network partition发生时，如果某个client被划分到了节点较少的一侧，那么CAP-available丢失，只能称之为CP；</p>
+
+<p>如果你允许（业务上允许）图示中的client2进行read操作，则CAP-consistent也会丢失，只能称之为P（CAP的3选2现在成了3选1）</p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html"> Martin Kleppmann. please-stop-calling-databases-cp-or-ap</a></li>
+<li><a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》9.Linearizability</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[What is ACID]]></title>
+    <link href="http://1feng.github.io/2017/06/07/ACID/"/>
+    <updated>2017-06-07T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/07/ACID</id>
+    <content type="html"><![CDATA[<h1>What</h1>
+
+<h2>Atomicity</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一个事务包含一系列的操作，这一系列的操作都成功，则意味着事务执行成功；一旦执行过程中发生故障(fault)，数据库需要放弃整个事务，并且撤销已经完成的部分操作</p>
+
+<p><strong>优势</strong>：</p>
+
+<p>方便异常处理，如果事务终止，应用层面可以确保什么修改都没有发生，可以安全的重试</p>
+
+<p><strong>典型案例</strong>：</p>
+
+<p>A向B账户转账100元：
+ 1. 从A的账户减少100元
+ 2. 从B的账户增加100元</p>
+
+<p>如果1执行完成2还未执行，此时数据库故障(<code>system fails</code>)，则为了保证Atomicity，数据库的事务系统需要回滚1操作</p>
+
+<p><strong>其他</strong>：</p>
+
+<blockquote><p>这里需要与concurrency-atomic做一下区分, concurrency-atomic指的是当某个线程执行某个操作时，其他线程不可能看到中间状态(half-finished)</p></blockquote>
+
+<h2>Consistency</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>这里的consistency是指，当事务结束时，系统（数据库）处于一个合法的状态(valid state),也就是说系统总是从一个合法的状态迁移至另一个合法的状态</p>
+
+<p><strong>其他</strong>：</p>
+
+<ol>
+<li>ACID-consistency是一个比较模糊的概念，状态迁移是系统的用户来保证的，系统只能保证其中一部分，不能完全覆盖，所以consistency依赖用户而不是系统</li>
+<li>MSDN给出的例子<a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">[2]</a>和Atomicity类似，但是差别在于A中事务终止回滚时因为system fails，而C中事务终止回滚是因为error（比如类型不匹配，数字和字符串做加法？）</li>
+<li>ACID-consistency 和CAP-consistency直接没有任何关系，仅仅使用了同一个单词而已</li>
+</ol>
+
+
+<h2>Islation</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>Isolation是指当多个事务并发(concurrency)执行时，应该彼此之间存在隔离，执行过程中互不影响</p>
+
+<h2>Durability</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一旦事务成功提交，即使发生硬件故障或者程序崩溃，任何已经写入的数据都不能丢失</p>
+
+<h1>How</h1>
+
+<h2>Atomicity ★★★★</h2>
+
+<p>可以利用持久化日志来实现，方便重启回滚</p>
+
+<h2>Consistency ★★</h2>
+
+<p>数据库层面做足够的合法性检测，其他由用户层/应用层来保证</p>
+
+<h2>Islation ★★★★★</h2>
+
+<p><strong>先看几点要求</strong>：</p>
+
+<ul>
+<li>Read commited（weak-islation type） 的两点要求
+
+<ul>
+<li>No Dirty Read: 不会读取到其他正在执行的事务中间状体的数据</li>
+<li>No Dirty Write: 事务不会overwrite到其他事务的uncommitted的数据</li>
+</ul>
+</li>
+<li>No Read Skew：
+
+<ul>
+<li>Read Skew举例：
+
+<ul>
+<li>A 在两个账户中各存放了500块钱，现在A要查询两个账户的余额</li>
+<li>查询账户1的SQL执行完成，余额500</li>
+<li>假设A之前设置了一笔定时的自动转账被触发，从账户2向账户1转100块，事务执行成功，账户1余额600，账户2余额400</li>
+<li>查询账户2的SQL执行完成，余额400</li>
+<li>在A看来，账户总额少了100块</li>
+<li>即使如此这个场景还是可以接受的，因为A可以重新查询，即可获得正常结果</li>
+</ul>
+</li>
+<li>无法接受Read Skew的两个场景：
+
+<ul>
+<li>Backup
+
+<ul>
+<li>事务执行的同时，可以完成数据备份</li>
+</ul>
+</li>
+<li>Analytic Queries and Integrity checks
+
+<ul>
+<li>事务执行的同时, 需要完成大量数据的查询或扫描</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Read-Modify-Write / Atomic Write Operation
+
+<ul>
+<li>举例：两个用户同时对一个counter字段做inc操作，后果与多线程并发操作类似会丢失一部分inc操作</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>举例（针对multi-object的场景）：
+
+<ul>
+<li>两位医生Alice 和 Bob同时检查当前是否有另外一个人正在值班，如果有则在系统中停止自己的值班状态，然后回家睡觉
+``` sql
+Alice执行事务如下：
+currently_on_call = (select count(*) from doctors where on_call = true and shift_id = 1234)
+if (currently_on_call >= 2) {
+  update doctors set on_call = true where name=‘Alice’ and shift_id = 1234
+}</li>
+</ul>
+
+
+<p>Bob执行事务如下：
+currently_on_call = (select count(*) from doctors where on_call = true and shift_id = 1234)
+if (currently_on_call >= 2) {</p>
+
+<pre><code>update doctors set on_call = true where name=‘Bob’ and shift_id = 1234
+</code></pre>
+
+<p>}</p>
+
+<p>有点像是multi-object版本的read-modify-write，但是有本质区别
+```</p></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>解决方案</strong>：</p>
+
+<ul>
+<li>Read commited
+
+<ul>
+<li>Dirty Write: 可以使用row-level lock来避免dirty write</li>
+<li>Dirty Read:
+
+<ul>
+<li>同样可以使用row-level lock来避免dirty read,但是缺点在于一个比较耗时的写操作会阻塞住read-only的操作，更严重的是会因此引发连锁反应</li>
+<li>更好的解决方法是使用类似于MVCC的snapshot-isolation方案来解决dirty read的问题</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>No Read Skew
+
+<ul>
+<li>类似于MVCC的snapshot-isolation方案来解决read skew问题，可同时满足Backup和Analytic Queries and Integrity checks的需求</li>
+</ul>
+</li>
+<li>Read-Modiry-Write / Atomic Write Operation
+
+<ul>
+<li>使用显示的锁操作(explicit-locking)来实现atomic write operation</li>
+<li>automatically-detecting-lost-update，一旦检测到lost update，事务需要终止并且retry</li>
+<li>实现compare-and-set操作用以支持SQL-where语句</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>串行化（serializability）隔离所有事务，这种方式可以解决上述除read skew外所有问题，但是工程实现上往往性能会是一个非常大的问题</li>
+</ul>
+</li>
+</ul>
+
+
+<blockquote><p>通常为了实现isolation，都是综合以上各种方案</p></blockquote>
+
+<h2>Durability ★★★★</h2>
+
+<p>磁盘+replica</p>
+
+<h1>Serializability</h1>
+
+<h2>What</h2>
+
+<blockquote><p>serializable-isolation 是最强等级的事务并发隔离，他可以确保即使多个事务是并行(parallel)执行的,最终的结果看起来也像是顺序的（serially），每个时间点只有一个事务在执行</p></blockquote>
+
+<h2>How</h2>
+
+<blockquote><p>根据上述描述，不难看出，其要求是让数据库解决所有的可能的并发竞争问题</p></blockquote>
+
+<ul>
+<li>真的串行化的执行事务：</li>
+<li>方法：将所有的事务扔到一个队列里排队，由特定的线程来依次执行</li>
+<li>缺点：性能太差</li>
+<li>存储过程（stored procedures）+ in-memory data：</li>
+<li>解释：本质是加快单个事务的执行速度（没有了磁盘IO），以便可以真正串行化事务执行</li>
+<li>缺点：存储过程需要用户自己来用SQL/PL完成，调试测试监控都比较棘手，同时一旦用户完成的存储过程性能比较差，会造成恶劣的影响，甚至引发连锁反应</li>
+<li>数据分区(partitioning)</li>
+<li>解释：本质是将单机的性能问题通过scale out来加速</li>
+<li>缺点：事务执行涉及的数据不能跨分区</li>
+<li>Two-Phase-Locking(2PL)</li>
+<li>描述：
+
+<ul>
+<li>当事务需要读一个object时，必须先以shared mode获取锁；多个事务可以同时以shared mode获取锁，但是一旦有事务以exclusive mode持有了锁，其他事务必须等待</li>
+<li>如果事务想要写一个object，必须先以exclusive mode获取锁；区别于shared mode，同一时间只能有一个事务以exclusive mode持有锁</li>
+<li>如果事务先读一个object，然后又要写（read-modify-write）,则需要将锁从shared mode升级为exclusive mode</li>
+<li>一旦事务获取了锁，除非事务提交或者终止，否则不允许释放锁，这也是二阶段命名的由来；</li>
+</ul>
+</li>
+<li>解释：
+
+<ul>
+<li>Expanding phase（扩大阶段--事务执行中）: locks are acquired and no locks are released.</li>
+<li>Shrinking phase（收缩阶段--事务结束时）: locks are released and no locks are acquired.</li>
+</ul>
+</li>
+<li>缺点：
+
+<ul>
+<li>吞吐量(through-put) 和 响应时间 与仅实现weak-isolation(如read-commit + No Read Skew)相比会比较差</li>
+<li>deadlock风险增大</li>
+</ul>
+</li>
+<li>Serializable Snapshot Isolation(SSI)</li>
+<li>与之前提到的snapshot-isolation相比，SSI为写操作增加了串行(serialization)冲突检测
+
+<ul>
+<li>detecting stale MVCC reads：针对write skew，如果事务提交时检测到之前的前置条件已经不成立了，则终止事务</li>
+<li>detecting writes that affect prior read：同样考虑write skew，数据库从index-level/table-level保存一些信息，以便当事务提交后可以检测其操作是否造成其他正在执行的事务读取的数据过期（前置条件失效），如果存在则主动通知该事务终止</li>
+</ul>
+</li>
+</ul>
+
+
+<h2>Serializability VS Linearizability</h2>
+
+<ul>
+<li>serializability： 事务隔离的属性，指事务执行的结果看起来像顺序的（串行的），以避免write skew</li>
+<li>linearizability： 指对读写共享数据的新近性（recency guarantee），与事务（把一系列操作看做整体来讨论）无关</li>
+</ul>
+
+
+<h1>References</h1>
+
+<p>[1]. <a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》7.Transactions</a></p>
+
+<p>[2]. <a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">ACID properties</a></p>
+
+<p>[3]. <a href="http://www.bailis.org/blog/linearizability-versus-serializability/Linearizability">Linearizability versus Serializability</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[unreliable network]]></title>
+    <link href="http://1feng.github.io/2017/06/06/unreliable-network/"/>
+    <updated>2017-06-06T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/06/unreliable-network</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>众所周知TCP是可靠的网络传输协议，但是为什么在分布式系统中又认为网络是不可靠的呢？通常有以下两点：
+1. 发送方无法确定接收方已经收到请求
+2. 发送方无法无法知晓接收方是否处理完请求</p>
+
+<p>可以看出，以上指的都是从应用层的角度观察的结果，而引起以上问题的原因可能有：
+- 消息在路由队列中等待转发
+- 接收方队列满，发生丢包
+- 接收方处理完成，回复的消息在排队或发生丢包
+- gc-stop-the-world等</p></blockquote>
+
+<h2>Synchronous network</h2>
+
+<p>像电话网络，有线电视网络等都是所谓synchronous network，他的特点如下：</p>
+
+<ul>
+<li><p>一旦连接建立，即享用专线</p></li>
+<li><p>专线享有固定的带宽</p></li>
+<li><p>路由(routers)没有队列</p></li>
+</ul>
+
+
+<p>以上决定了synchronous network的最大网络延迟是固定有上限的，即可以用timeout来判断消息传输是否存在问题</p>
+
+<h2>Asynchronous network</h2>
+
+<p>既然有synchronous network为什么还要搞以太网这一套呢？原因是为了充分利用带宽，由于互联网上数据传输的大小都不是固定的，使用专线意味着带宽资源的浪费。</p>
+
+<p>因此，Ehernet &amp;&amp; ip 使用了packed-switched协议, 具体如下：</p>
+
+<ol>
+<li><p>路由引入队列，最大化线路使用率</p></li>
+<li><p>TCP层引入send buffer &amp;&amp; recv buffer来动态的适配数据传输速率(滑动窗口)</p></li>
+</ol>
+
+
+<p>上述的优化本质是在latency和resource utilization之间做trade-off，也因此导致了无上限的延迟时间，即无法选择一个合适的timeoout来进行传输故障检测</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[timing and order]]></title>
+    <link href="http://1feng.github.io/2017/06/05/timing-and-order/"/>
+    <updated>2017-06-05T23:59:00+08:00</updated>
+    <id>http://1feng.github.io/2017/06/05/timing-and-order</id>
+    <content type="html"><![CDATA[<h1>Introduce</h1>
+
+<blockquote><p>分布式环境面临的两个主要的问题就是网络不可靠和时钟不可靠，这里主要总结时钟问题</p></blockquote>
+
+<h2>Physical Clocks</h2>
+
+<p>我们日常使用的计算机和服务器的物理时钟都是使用的石英(quartz)时钟，这类时钟天生存在误差，虽然铯原子钟的精度更高但是造价昂贵，并不适合商用计算机。</p>
+
+<p>对于商用计算机的时钟误差，通常使用NTP协议来进行时钟同步，然而由于网络的不可靠以及时钟误差NTP同步也会有些问题。</p>
+
+<p>商用计算机利用时英时钟在计算机上实现了两种clock:</p>
+
+<ul>
+<li><p>wall clock</p>
+
+<ul>
+<li>受NTP同步的影响，时钟会jump forward 或 jump backward来完成时钟同步</li>
+<li>如linux上的int gettimeofday(struct timeval <em>tv, struct timezone </em>tz);,返回1970-01-01 00:00:00 +0000 (UTC)至今的秒数和豪秒数</li>
+</ul>
+</li>
+<li><p>monotonic clock</p>
+
+<ul>
+<li>不受NTP影响，或者，受NTP同步的影响，时钟只会降低或者升高频率，以尽快完成时钟同步</li>
+<li>如linux上的int clock_gettime(clockid_t clk_id, struct timespec *tp),clk_id为CLOCK_MONOTONIC_RAW(本质是jiffies)或者是CLOCK_MONOTONIC；分别对应上述不受NTP影响和受NTP影响两种</li>
+</ul>
+</li>
+</ul>
+
+
+<p>适用性：</p>
+
+<ul>
+<li>wall clock
+
+<ul>
+<li>适用于：
+
+<ul>
+<li>单机保证时序</li>
+</ul>
+</li>
+<li>不适用：
+
+<ul>
+<li>单机计算duration或elapsed time，例如统计timeout，expire</li>
+<li>分布式环境下的时序问题</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>monotonic clock
+
+<ul>
+<li>适用于：
+
+<ul>
+<li>单机计算duration或elapsed time，例如统计timeout，expire</li>
+<li>单机保证时序</li>
+</ul>
+</li>
+<li>不适用：
+
+<ul>
+<li>分布式环境下时序问题</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<p>那么分布式环境下的时序问题如何解决呢?</p>
+
+<ul>
+<li>全序(total order)或者高精度的时间点共识(强调某个时间点)：
+
+<ul>
+<li>使用原子钟加更严格复杂的时钟同步策略来保证误差</li>
+<li>fault-tolent total ordering broadcast</li>
+</ul>
+</li>
+<li>偏序（partial order）：
+
+<ul>
+<li>利用因果关系来解决时序问题，即logic clock</li>
+</ul>
+</li>
+</ul>
+
+
+<h2>Logic Clock</h2>
+
+<p>利用因果关系来实现Logic Clock，见Lamport的<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System">论文</a></p>
+
+<p>利用Logic Clock来保证时序(偏序)，见 <a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/vector-clock">Vector Clock</a></p>
+
+<h2>其他</h2>
+
+<p>一个错误使用wall clock的<a href="http://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">案例</a></p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="http://dataintensive.net/">《Designing Data-Intensive Applications》8.Unreliable Clocks</a></li>
+<li><a href="http://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">How to do distributed locking</a></li>
+<li><a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System">《Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System》</a></li>
+<li><a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/vector-clock">Vector Clock</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+</feed>

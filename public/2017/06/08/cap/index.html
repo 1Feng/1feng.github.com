@@ -1,0 +1,277 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>CAP 问题 - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="Introduce 于2002年提出的CAP理论（三选二的方式来评估分布式系统）确实为分布式系统领域的发展提供了指导价值，但是就今天而言，这套理论已经意义微小了 Consistent 这里的一致性指的是强一致，又称linearizable或atomic。 论文中的描述如下： Under this &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">CAP 问题</h2>
+	<div class="entry-content"><h1>Introduce</h1>
+
+<blockquote><p>于2002年提出的CAP理论（三选二的方式来评估分布式系统）确实为分布式系统领域的发展提供了指导价值，但是就今天而言，这套理论已经意义微小了</p></blockquote>
+
+<h2>Consistent</h2>
+
+<p>这里的一致性指的是强一致，又称<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/consistency/linearizability">linearizable</a>或atomic。</p>
+
+<p>论文中的描述如下：</p>
+
+<blockquote><p>Under this consistency guarantee, there must exist a total order on all operations such that each operation looks as if it were completed at a single instant.</p></blockquote>
+
+<p>简单来讲就是如果把分布式系统看做一个黑盒，在外部看起来这个系统就是和单机没有区别。</p>
+
+<p>具体的来说：</p>
+
+<blockquote><p>任意的一条读操作R，如果发生在某条写操作W完成之后，那么R读到的要么是W的内容，要么是W之后的写操作写入的内容</p></blockquote>
+
+<p>更详细的描述可以参考<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/consistency/linearizability">linearizable</a></p>
+
+<p>这里的consistent 和 ACID中的consistent是完全不同的概念：
+- ACID-consistent特指事务
+- CAP-consistent仅仅是请求/响应操作顺序的属性</p>
+
+<h2>Available</h2>
+
+<p>论文中的定义：</p>
+
+<blockquote><p>For a distributed system to be continuously available, every request received
+by a non-failing node in the system must result in a response</p></blockquote>
+
+<p>这里的response是指no-error response</p>
+
+<p>即使是Probabilistic availability，在任意的failures发生时也不会影响针对CAP-available的结论，但是这里为了简单起见特指100% availability。</p>
+
+<p>如果专门针对partition-tolerance而言的话，available可以描述为：</p>
+
+<blockquote><p>even when severe
+network failures occur, every request must terminate.</p></blockquote>
+
+<p>terminate 是指任意使用该分布式系统的算法都会终止，注意是算法的终止。</p>
+
+<h2>Partition Tolerance</h2>
+
+<blockquote><p>网络割接和交换机故障都会造成network partition</p></blockquote>
+
+<p>network partition 图示:</p>
+
+<p><img src="/images/blog_images/cap/network-partition.png" alt="" /></p>
+
+<p>CAP的问题也是从这里开始体现：</p>
+
+<ul>
+<li>partition tolerance并非和CA对等的属性，而是一种因果的关系：partition发生时是选A还是选C，即如何去tolerant partition，</li>
+<li>分布式系统需要考虑的其他<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/unreliable-network">网络问题</a>也很多，包括延迟，网络不可靠等，并不仅仅是partition，所以使用CA,CP,AP去描述一个分布式系统并不完整</li>
+<li>很多分布式系统可以根据业务需求降低对consistent的要求，降低对available的要求，所以根本无法用CAP来描述</li>
+</ul>
+
+
+<h2>Partition in practice</h2>
+
+<blockquote><p>尽管network partition不能涵盖分布式系统所有需要面对的网络问题，但是它确实是网络问题中的一个难点和重点</p></blockquote>
+
+<h3>single-leader-Architecture</h3>
+
+<p><img src="/images/blog_images/cap/single-leader.png" alt="" /></p>
+
+<p>当某个client和leader处于不同partition时，此时CAP-available丢失，如果按照CAP理论，只能称之为CP</p>
+
+<h3>multi-leader-Architecture</h3>
+
+<p><strong>情景一</strong></p>
+
+<p><img src="/images/blog_images/cap/multi-leader-c.png" alt="" /></p>
+
+<p>某个client和所有的leader都不在一个partition，此时CAP-available丢失，如果按照CAP理论，只能称之为CP</p>
+
+<p>如果你允许（业务上允许）图示中的client2对replica进行read操作，则CAP-consistent也会丢失，只能称之为P（CAP的3选2现在成了3选1）</p>
+
+<p><strong>情景二</strong></p>
+
+<p><img src="/images/blog_images/cap/multi-leader.png" alt="" /></p>
+
+<p>leaders不在一个partition，此时CAP-consistent丢失，如果按照CAP理论，只能称之为AP</p>
+
+<h3>dynamo-style-Architecture(no-leader)</h3>
+
+<p><img src="/images/blog_images/cap/dynamo-style.png" alt="" /></p>
+
+<p>R + W > N,但是当network partition发生时，如果某个client被划分到了节点较少的一侧，那么CAP-available丢失，只能称之为CP；</p>
+
+<p>如果你允许（业务上允许）图示中的client2进行read操作，则CAP-consistent也会丢失，只能称之为P（CAP的3选2现在成了3选1）</p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html"> Martin Kleppmann. please-stop-calling-databases-cp-or-ap</a></li>
+<li><a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》9.Linearizability</a></li>
+</ol>
+
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-08T23:59:00+08:00" pubdate data-updated="true">Jun 8<span>th</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,287 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>timing and order - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="Introduce 分布式环境面临的两个主要的问题就是网络不可靠和时钟不可靠，这里主要总结时钟问题 Physical Clocks 我们日常使用的计算机和服务器的物理时钟都是使用的石英(quartz)时钟，这类时钟天生存在误差，虽然铯原子钟的精度更高但是造价昂贵，并不适合商用计算机。 &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">Timing and Order</h2>
+	<div class="entry-content"><h1>Introduce</h1>
+
+<blockquote><p>分布式环境面临的两个主要的问题就是网络不可靠和时钟不可靠，这里主要总结时钟问题</p></blockquote>
+
+<h2>Physical Clocks</h2>
+
+<p>我们日常使用的计算机和服务器的物理时钟都是使用的石英(quartz)时钟，这类时钟天生存在误差，虽然铯原子钟的精度更高但是造价昂贵，并不适合商用计算机。</p>
+
+<p>对于商用计算机的时钟误差，通常使用NTP协议来进行时钟同步，然而由于网络的不可靠以及时钟误差NTP同步也会有些问题。</p>
+
+<p>商用计算机利用时英时钟在计算机上实现了两种clock:</p>
+
+<ul>
+<li><p>wall clock</p>
+
+<ul>
+<li>受NTP同步的影响，时钟会jump forward 或 jump backward来完成时钟同步</li>
+<li>如linux上的int gettimeofday(struct timeval <em>tv, struct timezone </em>tz);,返回1970-01-01 00:00:00 +0000 (UTC)至今的秒数和豪秒数</li>
+</ul>
+</li>
+<li><p>monotonic clock</p>
+
+<ul>
+<li>不受NTP影响，或者，受NTP同步的影响，时钟只会降低或者升高频率，以尽快完成时钟同步</li>
+<li>如linux上的int clock_gettime(clockid_t clk_id, struct timespec *tp),clk_id为CLOCK_MONOTONIC_RAW(本质是jiffies)或者是CLOCK_MONOTONIC；分别对应上述不受NTP影响和受NTP影响两种</li>
+</ul>
+</li>
+</ul>
+
+
+<p>适用性：</p>
+
+<ul>
+<li>wall clock
+
+<ul>
+<li>适用于：
+
+<ul>
+<li>单机保证时序</li>
+</ul>
+</li>
+<li>不适用：
+
+<ul>
+<li>单机计算duration或elapsed time，例如统计timeout，expire</li>
+<li>分布式环境下的时序问题</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>monotonic clock
+
+<ul>
+<li>适用于：
+
+<ul>
+<li>单机计算duration或elapsed time，例如统计timeout，expire</li>
+<li>单机保证时序</li>
+</ul>
+</li>
+<li>不适用：
+
+<ul>
+<li>分布式环境下时序问题</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<p>那么分布式环境下的时序问题如何解决呢?</p>
+
+<ul>
+<li>全序(total order)或者高精度的时间点共识(强调某个时间点)：
+
+<ul>
+<li>使用原子钟加更严格复杂的时钟同步策略来保证误差</li>
+<li>fault-tolent total ordering broadcast</li>
+</ul>
+</li>
+<li>偏序（partial order）：
+
+<ul>
+<li>利用因果关系来解决时序问题，即logic clock</li>
+</ul>
+</li>
+</ul>
+
+
+<h2>Logic Clock</h2>
+
+<p>利用因果关系来实现Logic Clock，见Lamport的<a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System">论文</a></p>
+
+<p>利用Logic Clock来保证时序(偏序)，见 <a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/vector-clock">Vector Clock</a></p>
+
+<h2>其他</h2>
+
+<p>一个错误使用wall clock的<a href="http://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">案例</a></p>
+
+<h2>References</h2>
+
+<ol>
+<li><a href="http://dataintensive.net/">《Designing Data-Intensive Applications》8.Unreliable Clocks</a></li>
+<li><a href="http://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">How to do distributed locking</a></li>
+<li><a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System">《Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System》</a></li>
+<li><a href="https://github.com/1Feng/learn-distributed-systems/tree/master/theory/timing-and-order/vector-clock">Vector Clock</a></li>
+</ol>
+
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-05T23:59:00+08:00" pubdate data-updated="true">Jun 5<span>th</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,242 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Read-Only 的 linearizability - 1Feng's Blog</title>
+	<meta name="author" content="Travis Swicegood">
+
+	
+	<meta name="description" content="《Paxos Replicated State Machines as the Basis of a High-Performance
+Data Store》 介绍了使用了paxos算法进行副本同步，这里仅总结如何保证read-only操作的linearizability How 收到read- &hellip;">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+	<link href="/atom/" rel="alternate" title="1Feng's Blog" type="application/atom+xml">
+	<link rel="canonical" href="">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<script src="/javascripts/jquery.min.js"></script>
+	
+</head>
+
+
+<body>
+	<header id="header" class="inner"><h1><a href="/">1Feng's Blog</a></h1>
+<nav id="main-nav"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</nav>
+<nav id="mobile-nav">
+	<div class="alignleft menu">
+		<a class="button">Menu</a>
+		<div class="container"><ul class="main">
+	<li><a href="/">Blog</a></li>
+	<li><a href="/blog/archives">Archives</a></li>
+</ul>
+</div>
+	</div>
+	<div class="alignright search">
+		<a class="button"></a>
+		<div class="container">
+			<form action="http://google.com/search" method="get">
+				<input type="text" name="q" results="0">
+				<input type="hidden" name="q" value="site:1feng.github.io">
+			</form>
+		</div>
+	</div>
+</nav>
+<nav id="sub-nav" class="alignright">
+	<div class="social">
+		
+		
+		
+		
+		
+		<a class="github" href="https://github.com/1feng" title="GitHub">GitHub</a>
+		
+    
+		
+		
+		
+		
+		
+		<a class="rss" href="/atom/" title="RSS">RSS</a>
+		
+    
+	</div>
+	<form class="search" action="http://google.com/search" method="get">
+		<input class="alignright" type="text" name="q" results="0">
+		<input type="hidden" name="q" value="site:1feng.github.io">
+	</form>
+</nav>
+
+</header>
+	
+		
+
+	
+	<div id="content" class="inner"><article class="post">
+	<h2 class="title">Read-Only 的 Linearizability</h2>
+	<div class="entry-content"><blockquote><p><a href="https://github.com/1Feng/learn-distributed-systems/blob/master/practice/storage/others/SMARTER/Bolosky.pdf">《Paxos Replicated State Machines as the Basis of a High-Performance
+Data Store》</a> 介绍了使用了paxos算法进行副本同步，这里仅总结如何保证read-only操作的linearizability</p></blockquote>
+
+<h2>How</h2>
+
+<ol>
+<li>收到read-only请求后，记录下一个slot number</li>
+<li>slot number = max(已经commit的最大的operation number VS 当前节点成为leader后re-proposed最大的operation number)</li>
+<li>向所有replicas发送消息，检查是否有新leader出现（即检查当前节点是否扔是合法leader）</li>
+<li>如果加上自身有总数过半的节点仍然认为当前节点是leader则继续，否则丢弃请求</li>
+<li>将请求连同1中记录的slot number转发到任意replica（最好是3中回复确认的的replica），称之为replica A</li>
+<li>replica A等待slot number被执行，之后检测是否有新的paxos configuration被选择，如果有则丢弃请求，否则执行read操作返回结果</li>
+</ol>
+
+
+<h2>Why</h2>
+
+<p>最简单的保证linearizability的read-only的方法是将read-only操作当做写操作一样走一遍paxos流程，但是这样读的性能太低了，并且会导致leader压力巨大</p>
+
+<p>论文中提出的方法省去了走paxos流程的磁盘IO，仅一次广播检测确认leader角色，并将真正的读操作转移到了replica上</p>
+
+<p>那么如何证明呢？</p>
+
+<ol>
+<li>read-only linearizability需要保证的是在这个请求到达之前已经成功提交的写入都应该被本次读取看到</li>
+<li>我们将read-only request 到来之前已经成功提交的最后一条写入的operation number为 N，则有以下三种情况：</li>
+<li>N 是前一个leader提交的</li>
+<li>N 是当前节点成为leader后提交的</li>
+<li>当前节点早已经不是leader， N其实是后续leader提交的</li>
+<li>我们只需保证slot number >= N即可保证linearizability</li>
+<li>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</li>
+<li>N是当前leader提交的，那么一定有slot number >= N</li>
+<li>该情况请求会被丢弃，slot number不需要保证大于等于N</li>
+</ol>
+
+
+<h2>Extension</h2>
+
+<p>TIDB中在使用raft做数据同步的情况下，也使用了一个类似的<a href="https://zhuanlan.zhihu.com/p/25367435">方法</a>来保证read-only的linearizability：</p>
+
+<blockquote><p>当 leader 要处理一个读请求的时候：
+1. 将当前自己的 commit index 记录到一个 local 变量 ReadIndex 里面。
+2. 向其他节点发起一次 heartbeat，如果大多数节点返回了对应的 heartbeat response，那么 leader 就能够确定现在自己仍然是 leader。
+3. Leader 等待自己的状态机执行，直到 apply index 超过了 ReadIndex，这样就能够安全的提供 linearizable read 了。
+4. Leader 执行 read 请求，将结果返回给 client。</p></blockquote>
+
+<p>其中：</p>
+
+<blockquote><p>实现 ReadIndex 的时候有一个 corner case，在 etcd 和 TiKV 最初实现的时候，我们都没有注意到。也就是 leader 刚通过选举成为 leader 的时候，这时候的 commit index 并不能够保证是当前整个系统最新的 commit index，所以 Raft 要求当 leader 选举成功之后，首先提交一个 no-op 的 entry，保证 leader 的 commit index 成为最新的。</p></blockquote>
+
+<p>与本文中<code>N是前一个leader提交的，当前节点成为leader后re-proposed最大的operation number 一定大于等于N</code>是类似的（raft毕竟是paxos的变种）</p>
+
+<p>另外一种方式就是TIDB根据raft论文实现的lease的方式：</p>
+
+<blockquote><p>在 Raft 论文里面，提到了一种通过 clock + heartbeat 的 lease read 优化方法。也就是 leader 发送 heartbeat 的时候，会首先记录一个时间点 start，当系统大部分节点都回复了 heartbeat response，那么我们就可以认为 leader 的 lease 有效期可以到 start + election timeout / clock drift bound 这个时间点。</p>
+
+<p>为什么能够这么认为呢？主要是在于 Raft 的选举机制，因为 follower 会在至少 election timeout 的时间之后，才会重新发生选举，所以下一个 leader 选出来的时间一定可以保证大于 start + election timeout / clock drift bound。</p></blockquote>
+
+<h2>Referrence</h2>
+
+<ol>
+<li><a href="https://zhuanlan.zhihu.com/p/25367435">TiKV 源码解析系列 - Lease Read</a></li>
+</ol>
+
+</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-16T23:59:00+08:00" pubdate data-updated="true">Jun 16<span>th</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="#duoshuo">Comments</a></div>
+	
+</div>
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+		
+		
+		
+		
+	</div>
+	
+</div>
+
+
+
+  <section id="comment">
+    <h2 class="title">Comments</h2>
+    <div id="duoshuo" aria-live="polite"><!-- shuo Comment BEGIN -->
+<div class="ds-thread"></div>
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"beyondvincent"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = 'http://static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script>
+<!-- Duoshuo Comment END -->
+</div>
+  </section>
+
+
+</div>
+	<footer id="footer" class="inner">Copyright &copy; 2019
+
+    Travis Swicegood
+
+</footer>
+	<script src="/javascripts/slash.js"></script>
+<script src="/javascripts/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+(function($){
+	$('.fancybox').fancybox();
+})(jQuery);
+</script> <!-- Delete or comment this line to disable Fancybox -->
+<!--
+
+ -->
+
+	<script type="text/javascript">
+		var _gaq = _gaq || [];
+		_gaq.push(['_setAccount', 'UA-50190414-1']);
+		_gaq.push(['_trackPageview']);
+
+		(function() {
+			var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+			ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+			var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+		})();
+	</script>
+
+
+
+
+</body>
+</html>
