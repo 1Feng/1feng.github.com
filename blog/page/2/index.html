@@ -7,10 +7,7 @@
 	<meta name="author" content="Travis Swicegood">
 
 	
-	<meta name="description" content="Introduce 众所周知TCP是可靠的网络传输协议，但是为什么在分布式系统中又认为网络是不可靠的呢？通常有以下两点：
-1. 发送方无法确定接收方已经收到请求
-2. 发送方无法无法知晓接收方是否处理完请求 可以看出，以上指的都是从应用层的角度观察的结果，而引起以上问题的原因可能有：
-- &hellip;">
+	<meta name="description" content="What Atomicity 描述： 一个事务包含一系列的操作，这一系列的操作都成功，则意味着事务执行成功；一旦执行过程中发生故障(fault)，数据库需要放弃整个事务，并且撤销已经完成的部分操作 优势： 方便异常处理，如果事务终止，应用层面可以确保什么修改都没有发生，可以安全的重试 典型案例 &hellip;">
 	
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 
@@ -81,6 +78,318 @@
 
 	
 	<div id="content" class="inner">
+
+
+    <article class="post">
+	<h2 class="title">
+		
+		<a href="/2017/06/07/ACID/">
+		
+			What Is ACID</a>
+	</h2>
+	<div class="entry-content">
+		<h1>What</h1>
+
+<h2>Atomicity</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一个事务包含一系列的操作，这一系列的操作都成功，则意味着事务执行成功；一旦执行过程中发生故障(fault)，数据库需要放弃整个事务，并且撤销已经完成的部分操作</p>
+
+<p><strong>优势</strong>：</p>
+
+<p>方便异常处理，如果事务终止，应用层面可以确保什么修改都没有发生，可以安全的重试</p>
+
+<p><strong>典型案例</strong>：</p>
+
+<p>A向B账户转账100元：
+ 1. 从A的账户减少100元
+ 2. 从B的账户增加100元</p>
+
+<p>如果1执行完成2还未执行，此时数据库故障(<code>system fails</code>)，则为了保证Atomicity，数据库的事务系统需要回滚1操作</p>
+
+<p><strong>其他</strong>：</p>
+
+<blockquote><p>这里需要与concurrency-atomic做一下区分, concurrency-atomic指的是当某个线程执行某个操作时，其他线程不可能看到中间状态(half-finished)</p></blockquote>
+
+<h2>Consistency</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>这里的consistency是指，当事务结束时，系统（数据库）处于一个合法的状态(valid state),也就是说系统总是从一个合法的状态迁移至另一个合法的状态</p>
+
+<p><strong>其他</strong>：</p>
+
+<ol>
+<li>ACID-consistency是一个比较模糊的概念，状态迁移是系统的用户来保证的，系统只能保证其中一部分，不能完全覆盖，所以consistency依赖用户而不是系统</li>
+<li>MSDN给出的例子<a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">[2]</a>和Atomicity类似，但是差别在于A中事务终止回滚时因为system fails，而C中事务终止回滚是因为error（比如类型不匹配，数字和字符串做加法？）</li>
+<li>ACID-consistency 和CAP-consistency直接没有任何关系，仅仅使用了同一个单词而已</li>
+</ol>
+
+
+<h2>Islation</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>Isolation是指当多个事务并发(concurrency)执行时，应该彼此之间存在隔离，执行过程中互不影响</p>
+
+<h2>Durability</h2>
+
+<p><strong>描述</strong>：</p>
+
+<p>一旦事务成功提交，即使发生硬件故障或者程序崩溃，任何已经写入的数据都不能丢失</p>
+
+<h1>How</h1>
+
+<h2>Atomicity ★★★★</h2>
+
+<p>可以利用持久化日志来实现，方便重启回滚</p>
+
+<h2>Consistency ★★</h2>
+
+<p>数据库层面做足够的合法性检测，其他由用户层/应用层来保证</p>
+
+<h2>Islation ★★★★★</h2>
+
+<p><strong>先看几点要求</strong>：</p>
+
+<ul>
+<li>Read commited（weak-islation type） 的两点要求
+
+<ul>
+<li>No Dirty Read: 不会读取到其他正在执行的事务中间状体的数据</li>
+<li>No Dirty Write: 事务不会overwrite到其他事务的uncommitted的数据</li>
+</ul>
+</li>
+<li>No Read Skew：
+
+<ul>
+<li>Read Skew举例：
+
+<ul>
+<li>A 在两个账户中各存放了500块钱，现在A要查询两个账户的余额</li>
+<li>查询账户1的SQL执行完成，余额500</li>
+<li>假设A之前设置了一笔定时的自动转账被触发，从账户2向账户1转100块，事务执行成功，账户1余额600，账户2余额400</li>
+<li>查询账户2的SQL执行完成，余额400</li>
+<li>在A看来，账户总额少了100块</li>
+<li>即使如此这个场景还是可以接受的，因为A可以重新查询，即可获得正常结果</li>
+</ul>
+</li>
+<li>无法接受Read Skew的两个场景：
+
+<ul>
+<li>Backup
+
+<ul>
+<li>事务执行的同时，可以完成数据备份</li>
+</ul>
+</li>
+<li>Analytic Queries and Integrity checks
+
+<ul>
+<li>事务执行的同时, 需要完成大量数据的查询或扫描</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Read-Modify-Write / Atomic Write Operation
+
+<ul>
+<li>举例：两个用户同时对一个counter字段做inc操作，后果与多线程并发操作类似会丢失一部分inc操作</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>举例（针对multi-object的场景）：
+
+<ul>
+<li>两位医生Alice 和 Bob同时检查当前是否有另外一个人正在值班，如果有则在系统中停止自己的值班状态，然后回家睡觉</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sql'><span class='line'><span class="n">Alice</span><span class="err">执行事务如下：</span>
+</span><span class='line'><span class="n">currently_on_call</span> <span class="o">=</span> <span class="p">(</span><span class="k">select</span> <span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">from</span> <span class="n">doctors</span> <span class="k">where</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span><span class="p">)</span>
+</span><span class='line'><span class="n">if</span> <span class="p">(</span><span class="n">currently_on_call</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="err">{</span>
+</span><span class='line'>    <span class="k">update</span> <span class="n">doctors</span> <span class="k">set</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">where</span> <span class="n">name</span><span class="o">=</span><span class="err">‘</span><span class="n">Alice</span><span class="err">’</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span>
+</span><span class='line'><span class="err">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">Bob</span><span class="err">执行事务如下：</span>
+</span><span class='line'><span class="n">currently_on_call</span> <span class="o">=</span> <span class="p">(</span><span class="k">select</span> <span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">from</span> <span class="n">doctors</span> <span class="k">where</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span><span class="p">)</span>
+</span><span class='line'><span class="n">if</span> <span class="p">(</span><span class="n">currently_on_call</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="err">{</span>
+</span><span class='line'>    <span class="k">update</span> <span class="n">doctors</span> <span class="k">set</span> <span class="n">on_call</span> <span class="o">=</span> <span class="k">true</span> <span class="k">where</span> <span class="n">name</span><span class="o">=</span><span class="err">‘</span><span class="n">Bob</span><span class="err">’</span> <span class="k">and</span> <span class="n">shift_id</span> <span class="o">=</span> <span class="mi">1234</span>
+</span><span class='line'><span class="err">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="err">有点像是</span><span class="n">multi</span><span class="o">-</span><span class="k">object</span><span class="err">版本的</span><span class="k">read</span><span class="o">-</span><span class="k">modify</span><span class="o">-</span><span class="k">write</span><span class="err">，但是有本质区别</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>解决方案</strong>：</p>
+
+<ul>
+<li>Read commited
+
+<ul>
+<li>Dirty Write: 可以使用row-level lock来避免dirty write</li>
+<li>Dirty Read:
+
+<ul>
+<li>同样可以使用row-level lock来避免dirty read,但是缺点在于一个比较耗时的写操作会阻塞住read-only的操作，更严重的是会因此引发连锁反应</li>
+<li>更好的解决方法是使用类似于MVCC的snapshot-isolation方案来解决dirty read的问题</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>No Read Skew
+
+<ul>
+<li>类似于MVCC的snapshot-isolation方案来解决read skew问题，可同时满足Backup和Analytic Queries and Integrity checks的需求</li>
+</ul>
+</li>
+<li>Read-Modiry-Write / Atomic Write Operation
+
+<ul>
+<li>使用显示的锁操作(explicit-locking)来实现atomic write operation</li>
+<li>automatically-detecting-lost-update，一旦检测到lost update，事务需要终止并且retry</li>
+<li>实现compare-and-set操作用以支持SQL-where语句</li>
+</ul>
+</li>
+<li>Write Skew
+
+<ul>
+<li>串行化（serializability）隔离所有事务，这种方式可以解决上述除read skew外所有问题，但是工程实现上往往性能会是一个非常大的问题</li>
+</ul>
+</li>
+</ul>
+
+
+<blockquote><p>通常为了实现isolation，都是综合以上各种方案</p></blockquote>
+
+<h2>Durability ★★★★</h2>
+
+<p>磁盘+replica</p>
+
+<h1>Serializability</h1>
+
+<h2>What</h2>
+
+<blockquote><p>serializable-isolation 是最强等级的事务并发隔离，他可以确保即使多个事务是并行(parallel)执行的,最终的结果看起来也像是顺序的（serially），每个时间点只有一个事务在执行</p></blockquote>
+
+<h2>How</h2>
+
+<blockquote><p>根据上述描述，不难看出，其要求是让数据库解决所有的可能的并发竞争问题</p></blockquote>
+
+<ul>
+<li>真的串行化的执行事务：</li>
+<li>方法：将所有的事务扔到一个队列里排队，由特定的线程来依次执行</li>
+<li>缺点：性能太差</li>
+<li>存储过程（stored procedures）+ in-memory data：</li>
+<li>解释：本质是加快单个事务的执行速度（没有了磁盘IO），以便可以真正串行化事务执行</li>
+<li>缺点：存储过程需要用户自己来用SQL/PL完成，调试测试监控都比较棘手，同时一旦用户完成的存储过程性能比较差，会造成恶劣的影响，甚至引发连锁反应</li>
+<li>数据分区(partitioning)</li>
+<li>解释：本质是将单机的性能问题通过scale out来加速</li>
+<li>缺点：事务执行涉及的数据不能跨分区</li>
+<li>Two-Phase-Locking(2PL)</li>
+<li>描述：
+
+<ul>
+<li>当事务需要读一个object时，必须先以shared mode获取锁；多个事务可以同时以shared mode获取锁，但是一旦有事务以exclusive mode持有了锁，其他事务必须等待</li>
+<li>如果事务想要写一个object，必须先以exclusive mode获取锁；区别于shared mode，同一时间只能有一个事务以exclusive mode持有锁</li>
+<li>如果事务先读一个object，然后又要写（read-modify-write）,则需要将锁从shared mode升级为exclusive mode</li>
+<li>一旦事务获取了锁，除非事务提交或者终止，否则不允许释放锁，这也是二阶段命名的由来；</li>
+</ul>
+</li>
+<li>解释：
+
+<ul>
+<li>Expanding phase（扩大阶段&#8211;事务执行中）: locks are acquired and no locks are released.</li>
+<li>Shrinking phase（收缩阶段&#8211;事务结束时）: locks are released and no locks are acquired.</li>
+</ul>
+</li>
+<li>缺点：
+
+<ul>
+<li>吞吐量(through-put) 和 响应时间 与仅实现weak-isolation(如read-commit + No Read Skew)相比会比较差</li>
+<li>deadlock风险增大</li>
+</ul>
+</li>
+<li>Serializable Snapshot Isolation(SSI)</li>
+<li>与之前提到的snapshot-isolation相比，SSI为写操作增加了串行(serialization)冲突检测
+
+<ul>
+<li>detecting stale MVCC reads：针对write skew，如果事务提交时检测到之前的前置条件已经不成立了，则终止事务</li>
+<li>detecting writes that affect prior read：同样考虑write skew，数据库从index-level/table-level保存一些信息，以便当事务提交后可以检测其操作是否造成其他正在执行的事务读取的数据过期（前置条件失效），如果存在则主动通知该事务终止</li>
+</ul>
+</li>
+</ul>
+
+
+<h2>Serializability VS Linearizability</h2>
+
+<ul>
+<li>serializability： 事务隔离的属性，指事务执行的结果看起来像顺序的（串行的），以避免write skew</li>
+<li>linearizability： 指对读写共享数据的新近性（recency guarantee），与事务（把一系列操作看做整体来讨论）无关</li>
+</ul>
+
+
+<h1>References</h1>
+
+<p>[1]. <a href="http://dataintensive.net/">Martin Kleppmann. 《Designing Data-Intensive Applications》7.Transactions</a></p>
+
+<p>[2]. <a href="https://msdn.microsoft.com/en-us/library/aa480356.aspx">ACID properties</a></p>
+
+<p>[3]. <a href="http://www.bailis.org/blog/linearizability-versus-serializability/Linearizability">Linearizability versus Serializability</a></p>
+
+		
+		
+	</div>
+
+
+<div class="meta">
+	<div class="date">
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-06-07T23:59:00+08:00" pubdate data-updated="true">Jun 7<span>th</span>, 2017</time></div>
+	<div class="tags">
+
+
+	<a class='category' href='/tags/distribute/'>distribute</a>, <a class='category' href='/tags/system/'>system</a>
+
+
+</div>
+	
+	<div class="comments"><a href="/2017/06/07/ACID/#duoshuo">Comments</a></div>
+	
+</div>
+</article>
 
 
     <article class="post">
@@ -1562,150 +1871,6 @@ InternalKey</p></li>
 </div>
 </article>
 
-
-    <article class="post">
-	<h2 class="title">
-		
-		<a href="/2016/07/20/signal-with-mutex-locked-or-not/">
-		
-			Signal With Mutex Locked or Not(译)</a>
-	</h2>
-	<div class="entry-content">
-		<p><a href="http://www.domaigne.com/blog/computing/condvars-signal-with-mutex-locked-or-not/">原文链接</a></p>
-
-<h3>介绍</h3>
-
-<p>当我们使用条件变量的时候，总有这样一个问题：到底该在解锁mutex之前进行sinal/broadcast，还是在之后？</p>
-
-<p>什么时候进行signal？</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">pthread_mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">);</span>
-</span><span class='line'><span class="n">predicate</span><span class="o">=</span><span class="nb">true</span><span class="p">;</span>
-</span><span class='line'><span class="n">pthread_cond_signal</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cv</span><span class="p">);</span>    <span class="c1">// OR: pthread_mutex_unlock(&amp;mutex);</span>
-</span><span class='line'><span class="n">pthread_mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mutex</span><span class="p">);</span> <span class="c1">//  : pthread_cond_signal(&amp;cv);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>权威解答</h3>
-
-<p><a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_cond_signal.html">SUS7</a>中提到：</p>
-
-<blockquote><p>当其他线程利用pthread_cond_wait() 或pthread_cond_timedwait() 在关联的条件变量上等待时，当前线程既可以在持有（锁住）mutex时调用pthread_cond_broadcast()或 pthread_cond_signal() ，也可以在不持有mutex的情况下调用。然而，如果需要可预测的线程调度行为，则需要在mutex被锁住的情况下调用pthread_cond_broadcast() 或 pthread_cond_signal()</p></blockquote>
-
-<p>上述具体时什么意思呢？</p>
-
-<h3>锁住mutex时进行signal</h3>
-
-<p>在某些平台上，OS就在 signal/boadcast 之后进行上下文切换（context switch）来唤醒等待线程以达到降低延迟的效果。在一个单处理的系统上，如果我们在持有mutex的情况signal/broadcast则会导致不必要的上下文切换（context switch）.</p>
-
-<ul>
-<li><img src="/images/blog_images/signal-ctx-switch.jpg" alt="Fig 1- 锁住mutex时进行signal，我们造成了两次不必要的上下文切换（context switch）" /></li>
-</ul>
-
-
-<p>事实上，考虑figure 1中的场景。线程T2阻塞在条件变量上。当 T1 在持有关联的mutex的情况下 signal 条件变量时，上下文切换至T2导致T2被唤醒。但是在pthread_cond_wait返回之前，T2需要锁住条件变量关联的mutex。然而条件变量关联的mutex此时仍被T1持有（锁住）。结果导致T2被阻塞（由于mutex竞争）并且上下文切换至T1。之后T1解锁条件变量关联的mutex，同时T2最终变为runalbe状态。当我们对多个线程进行条件变量broadcast（多播）时，情况会变的更加糟糕。</p>
-
-<p>有些Pthreds 使用名为 <strong>wait morphing</strong> [1]的优化实现方式来应对这个缺陷。这种优化可以在持有锁的情况下避免上下文切换(context swith)直接将线程从条件变量队列转移至mutex队列。例如 NPTL 使用了<strong>类似的技术</strong>[2]来优化broadcat.</p>
-
-<p>当我们的实现没有使用 wait morphing时，我们可能需要先解锁然后在进行 signal/broadcast. 事实上，解锁操作不会导致上下文切换至T2，因为T2阻塞在了条件变量上。当signal/broadcast之后，T2被唤醒后会发现mutex已经被解锁，便可以持有mutex。</p>
-
-<h3>解锁mutex后signal</h3>
-
-<p>这样（译者注：解锁mutex后signal）存在缺点么？首先我们关注一个不同的情形。如果我们先signal或者broadcast，我们可以确保唤醒一个阻塞在条件变量上的线程（假设存在这样一个线程）。然而，如果我们先解锁，我们可能会唤醒一个阻塞在mutex上的线程。</p>
-
-<p>什么时候会出现这种情形呢？一个thread可能阻塞在mutex上，因为：</p>
-
-<ul>
-<li>线程即将检查谓词（译者注：条件变量的等待条件），并且最终会等待在条件变量上</li>
-<li>线程即将修改谓词，并且最终会通知等待在条件变量上的线程</li>
-</ul>
-
-
-<p>在第一种情况下，我们可能获取一个被拦截的唤醒。事实上，再次考虑figure 1中的情形，但是存在第三个线程T3，T3阻塞在mutex上(<code>译注：即将检查谓词</code>)。当T1解锁mutex，上下文切换至T3。现在T3发现谓词为真，因此执行相应处理，并且最终会在T1 signal/broadcast 条件变量之前重置谓词。当T2被唤醒，出发唤醒的条件已经不存在。在一个正确的程序设计中，这不是一个问题（<code>译注：只要你不对调度结果有所期待，这肯定不是问题</code>），因为T2总是会应对假唤醒（<code>译注：即使被唤醒也会再次检查谓词</code>）。下面的程序演示了被拦截的唤醒情形。</p>
-
-<p><a href="http://www.domaigne.com/blog/wp-content/plugins/wp-codebox/wp-codebox.php?p=33&amp;download=cv_01.c">Download cv_01.c</a></p>
-
-<p>在第二个例子（<code>译注：即线程即将修改谓词，并且最终会通知等待在条件变量上的线程</code>）里，我们最终延迟了T2的唤醒。实时上，T3可以发现T1已经修改了谓词，并且决定不再signal/broadcast。只要T1不被调度并获得机会signal/broadcast，那么T2会仍旧会阻塞。（<code>译注：一般是不会取消signal的，至少我不知道什么时候会这样做，这里只是假设你这样做了，会有潜在风险，这种风险也可以通过修改设计来避免的</code>）</p>
-
-<h3>考虑实时调度</h3>
-
-<p>在实时系统程序设计中，线程的优先级通常会被截止时间的临界所影响。 概括的说，越临近结束时间，优先级越高。不遵守时限可能会造成系统失败，结果可能会损坏我在之前<a href="http://www.domaigne.com/blog/computing/real-world-systems/">《Real World Sytems》</a>中讨论的环境。</p>
-
-<p>考虑这种情形，你明确的想要最高优先级的线程在变为runnable状态时可以尽快获取CPU时间片，但是低优先级的线程却可能阻止高优先级的线程运行，这种情形被称为优先级倒置。这种情况发生的一个例子就高优先级的线程想要锁住一个已经被低优先级线程持有的mutex。只要优先级倒置的持续时间总是很少或被限制的，这事实就不是一个问题。一个更严重的情况是优先级倒置（潜在的）不被限制, 这可能倒置高优先级的线程错过截止时间，像<strong>优先级顶置</strong>或<strong>优先级继承</strong> [3]这种协议就是被设计来规避这种问题的。</p>
-
-<blockquote><p>译者注：
-- 优先级置顶：就是给共享资源设置一个预定的优先级，这个优先级肯定大于所有会请求这个资源的线程，哪个线程获取了资源，它的优先级就提升到这个预定的优先级，这样它就会比高优先级的线程的优先级还高，等当前线程运行完不再持有共享资源，资源会率先被优先级其次的获取，同时当前线程优先级恢复正常，一切继续。这样就避免了中间优先级的线程拦截持有共享资源
-- 优先级继承：低优先级的线程获取了共享资源后，优先级不变，当高优先级的线程去请求共享资源时，低优先级的线程的优先级会被短暂提升，直至其释放掉共享资源</p></blockquote>
-
-<p>当使用实时调度策略时，signal/broadcast 操作唤醒最高优先级的线程。如果存在两个或更多线程拥有同样的优先级，会优先选择第一个阻塞在条件变量上的线程。这也是我们所期待的。</p>
-
-<p>然而，条件变量可能被不做限制的优先级倒置以三种方式影响（<code>译注：这三种情况下使用优先级顶置或者优先级继承也没用</code>）。第一种明显的倒置是条件变量关联的mutex，因为mutex自身就会被不做限制的优先级倒置所影响（<code>译注：注意和下面第三种情况做区分，这里仅仅因为mutex解锁，T3恰巧阻塞在锁上，获得锁之后并没干啥和T2相关的事，仅仅就是T3优先级低于T2</code>）。</p>
-
-<p>另外一种优先级倒置可以发生在线程signal/broadcast条件变量之前，再考虑figure 1中的情节，假设T1是一个低优先级（P1）的线程，T2是一个高优先级（P2）的线程（P1 &lt; P2）。只要T1不signal/broadcast，他就就可以被中间优先级（P3）的线程T3抢占（P1 &lt; P3 &lt; P2）（<code>译者注：注意和前一种做区分，这个抢占是cpu正常调度引起的，这里T3并没有请求获取mutex，仅仅是因为P3 &gt; P1</code>）。通常情况，如果选择先解锁再signal/broadcast, T1可以在解锁之后和signal/broadcast之前被抢占。最终T1不会唤醒T2，因此T3阻止了比它优先级更高的T2运行。如果先signal/broadcast，再解锁，我们可以保证T1解锁之后T2可以尽快被调度到，前提是mutex上使用优先级顶置或优先级继承协议（<code>译注：根据我的理解，以优先级顶置为例，T1持有mutex时，优先级会短暂提升到最高，等它释放后，T2就理所当然凭借高优先级，以及不再阻塞在条件变量上，而获取mutex</code>）。所以持有mutex时进行signal/broadcast稍微优于先unlock再singnal/broadcast(<code>译注：假设我们想要的结果是保证在T1进行signal/boadcast之后，T2可以尽快得到cpu时间片</code>)。值得注意的是不管怎样在这两种情形(<code>译注：即是否先解锁再signal/boadcast这两</code>)中，当T1正在修改谓词的时候优先级倒置都可能会发生（<code>译注：根据我的理解，这种调度结果是正常的，毕竟P3&gt;P1，但如果有优先级置顶或者优先级继承协议的话，可以避免这种情况</code>）.</p>
-
-<p>最后一个是，当T3阻塞在mutex上的情形。我么已经在之前分时调度的章节（<code>译注：解锁mutex后signal小节</code>）讨论过了。如果T1在唤醒T2之前解锁，T3将会获得CPU时间片。在拦截唤醒的例子中，条件被修改后本应该T2处理的却被优先级更低的T3给处理了（<code>译注：这个例子强调的是倒置之后本应T2等待的谓词，被T3抢走了，T2继续阻塞</code>）。另一个线程即将修改谓词并且最终会通知等待在条件变量上的线程例子中，我们同样再次被潜在的不受限制的优先级倒置影响。</p>
-
-<p>根据之前的解释，我们相信在要想实时调度的结果可预测(<code>译注：不可预测其实还是蛮严重的，毕竟会导致任务错过deadline</code>)，signal/broadcast之后解锁mutex是必须的。这种判断应该有所节制，我从来没有经历过必须强制执行可预测性的情形。总是有可能去修改设计，所以先解锁未尝不可。事实上，David Butenhof 在最近的文章中写道，在SUS标准中的实时可预测陈述本质上是政治而不是技术[4]。但这已经被实时工作组的成员追捧起来，并且为了避免投票过程中潜在的反对也已经在SUS标准稳定下来。</p>
-
-<h3>一个陷阱 （A Trap）</h3>
-
-<p>存在一个案例，如果你先unlock会令你陷入问题中。你必须确保当你解锁mutex之后你所signal/broadcast的条件变量依旧引用的是一个有效的条件变量。这听起来似乎是显而易见的，但是在实践中一直确保这一点并不轻松[5]. 特别的，如果正在被唤醒的线程中销毁条件变量（亦或者条件变量所在的内存）则需要拉响警报了。</p>
-
-<p><a href="http://www.domaigne.com/blog/wp-content/plugins/wp-codebox/wp-codebox.php?p=33&amp;download=cv_02.c">Download cv_02.c</a></p>
-
-<p>上述程序运行在至少双核的机器上，在反复几千次后被SIGSEGV信号所终止。问题在56-59行。问题发生在在负责停止的线程发现nthread为0时会销毁条件变量，但是稍后在线程池中的线程会尝试signal已经不存在的条件变量。如果我们先signal然后再解锁，程序运行就不会有问题。</p>
-
-<h3>结论</h3>
-
-<p>我个人选择在持有mutex的情况下进行signal/boadcast.首先，我可以避免一些晦涩的bug。其次，这样做在使用wait morphing优化实现的pthread中几乎没有性能影响。再者，更重要的一点，我认为当且仅当经过分析有明显的性能提升时才会将解锁放在signal/boadcast之前。对瓶颈没有贡献的优化是没有意义的。</p>
-
-<h3>引用以及推荐阅读</h3>
-
-<ul>
-<li>[1] David R. Butenhof: Programming with POSIX Threads, section 3.3.3, pp 82-83, Addison-Wesley, ISBN-13 978-0-201-63392-4.]</li>
-<li>[2] <a href="https://www.akkadia.org/drepper/futex.pdf">Ulrich Drepper. Futexes Are Tricky</a>. A paper about futex, the Linux kernel object behind condition variable. See in particular the Chapter 8 “Optimizing Wakeup” on page 9-10.</li>
-<li>[3] <a href="http://www.cs.rice.edu/~mgricken/teaching/402/09-spring/readings/PriorityInversion.html">Kyle &amp; Bill Renwick. How to use priority inheritance</a>. An excellent article from embedded.com about priority inversion and possible cures.</li>
-<li>[4] <a href="https://groups.google.com/forum/#!topic/comp.programming.threads/wEUgPq541v8">basic question about concurrency</a>. A discussion thread on c.p.t, where David Butenhof explains what the “predictable scheduling” statement in the SUS standard means and where it comes from.</li>
-<li>[5] <a href="http://groups.google.de/group/comp.programming.threads/browse_thread/thread/23dd5883dc36d14a/7e5fcdf360543375">A word of caution when juggling pthread_cond_signal/pthread_mutex_unlock</a> . A post from Bryan Ischo on c.p.t. that shows a subtle bug when unlocking before signaling.</li>
-</ul>
-
-
-		
-		
-	</div>
-
-
-<div class="meta">
-	<div class="date">
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2016-07-20T16:48:00+08:00" pubdate data-updated="true">Jul 20<span>th</span>, 2016</time></div>
-	<div class="tags">
-
-
-	<a class='category' href='/tags/concurrency/'>concurrency</a>, <a class='category' href='/tags/system/'>system</a>
-
-
-</div>
-	
-	<div class="comments"><a href="/2016/07/20/signal-with-mutex-locked-or-not/#duoshuo">Comments</a></div>
-	
-</div>
-</article>
-
 <nav id="pagenavi">
     
         <a href="/" class="prev">Prev</a>
@@ -1715,7 +1880,7 @@ InternalKey</p></li>
     
     <div class="center"><a href="/blog/archives">Blog Archives</a></div>
 </nav></div>
-	<footer id="footer" class="inner">Copyright &copy; 2019
+	<footer id="footer" class="inner">Copyright &copy; 2021
 
     Travis Swicegood
 
